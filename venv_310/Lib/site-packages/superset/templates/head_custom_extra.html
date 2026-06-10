@@ -1,0 +1,34 @@
+<style>
+/* Logo styling - properly aligned with menu items */
+.navbar-brand img,
+a[href="/superset/welcome/"] img,
+img[src*="superset"],
+img[src*="samarthx"] {
+    height: 50px !important;
+    max-height: 50px !important;
+    width: auto !important;
+    object-fit: contain !important;
+    vertical-align: middle !important;
+    position: relative !important;
+    top: -8px !important;
+}
+
+/* Logo container alignment */
+.navbar-brand,
+a[href="/superset/welcome/"] {
+    display: inline-flex !important;
+    align-items: center !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+}
+
+/* Hide duplicate logos in settings/right side */
+[class*="Settings"] img[src*="superset"],
+[class*="settings"] img[src*="superset"],
+.ant-dropdown-trigger img[src*="superset"],
+[class*="Settings"] img[src*="samarthx"],
+[class*="settings"] img[src*="samarthx"],
+.ant-dropdown-trigger img[src*="samarthx"] {
+    display: none !important;
+}
+</style>
