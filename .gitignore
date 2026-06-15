@@ -44,9 +44,14 @@ Thumbs.db
 logs/
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Markdown documentation (kept local only)
+# Full backup folders (contain DB dumps + secrets)
 # ═══════════════════════════════════════════════════════════════════════════
-*.md
+FULL_BACKUP_*/
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Note: Documentation (*.md) IS committed for team handover.
+# Secrets (.env), backups (*.sql), and venv remain excluded above.
+# ═══════════════════════════════════════════════════════════════════════════
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Distribution / packaging

@@ -1,82 +1,9 @@
-<script>
-// Logo replacement script
-(function() {
-    'use strict';
-    
-    // Function to replace and style logo
-    function replaceLogo() {
-        // Find the main navbar brand logo (left side)
-        const navbarLogo = document.querySelector('.navbar-brand img, a[href="/superset/welcome/"] img');
-        if (navbarLogo) {
-            navbarLogo.src = '/static/assets/images/samarthx_logo.png';
-            navbarLogo.alt = 'SamarthX';
-            navbarLogo.style.cssText = `
-                max-height: 40px !important;
-                height: 60px !important;
-                width: auto !important;
-                vertical-align: middle !important;
-                display: block !important;
-                margin: auto !important;
-                object-fit: contain !important;
-            `;
-            
-            // Center the parent container and increase its height
-            const parent = navbarLogo.closest('.navbar-brand, a');
-            if (parent) {
-                parent.style.cssText = `
-                    display: flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
-                    height: auto !important;
-                    padding: 10px !important;
-                `;
-            }
-        }
-         
-        // Find and HIDE the right side logo (Settings menu logo)
-        const settingsLogo = document.querySelector('[class*="Settings"] img, [class*="settings"] img, .ant-dropdown-trigger img');
-        if (settingsLogo && settingsLogo !== navbarLogo) {
-            settingsLogo.style.display = 'none';
-        }
-        
-        // Hide any other duplicate logos except the main navbar one
-        const allLogos = document.querySelectorAll('img[src*="superset"], img[alt*="Superset"], img[alt*="superset"], img[src*="samarthx"]');
-        allLogos.forEach(img => {
-            if (img !== navbarLogo) {
-                // Check if it's in the top-right area (Settings dropdown)
-                const rect = img.getBoundingClientRect();
-                if (rect.right > window.innerWidth - 200) {
-                    img.style.display = 'none';
-                }
-            }
-        });
-    }
-    
-    // Run immediately
-    replaceLogo();
-    
-    // Run after DOM is fully loaded
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', replaceLogo);
-    }
-    
-    // Run after delays to catch dynamically loaded content
-    setTimeout(replaceLogo, 500);
-    setTimeout(replaceLogo, 1000);
-    setTimeout(replaceLogo, 2000);
-    
-    // Watch for DOM changes (for React re-renders)
-    const observer = new MutationObserver(replaceLogo);
-    observer.observe(document.body || document.documentElement, {
-        childList: true,
-        subtree: true
-    });
-})();
-</script>
-
-
 <!-- ═══════════════════════════════════════════════════════════════════════
      SamarthX AI Chat Widget
+     Add this to: venv_310/Lib/site-packages/superset/templates/tail_js_custom_extra.html
+     (Append AFTER the existing logo replacement script)
+
+     IMPORTANT: Update N8N_WEBHOOK_URL below to your actual n8n webhook URL
      ═══════════════════════════════════════════════════════════════════════ -->
 
 <style>
@@ -90,7 +17,7 @@
     background: #2563eb;
     color: #fff;
     font-size: 26px;
-    display: none;
+    display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
@@ -210,31 +137,22 @@
 (function() {
   'use strict';
 
-  // UPDATE for production: https://your-n8n-domain/webhook/ai-chat
+  // ═══════════════════════════════════════════════════════════
+  // UPDATE THIS to your n8n webhook URL
+  // Local test:  http://localhost:5678/webhook/ai-chat
+  // Production:  https://your-n8n-domain/webhook/ai-chat
+  // ═══════════════════════════════════════════════════════════
   const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/ai-chat';
 
   function init() {
     const btn = document.getElementById('sx-ai-button');
     const panel = document.getElementById('sx-ai-panel');
-
-    // Don't show the AI chat on login/auth pages
-    const path = window.location.pathname.toLowerCase();
-    const isAuthPage = path.indexOf('/login') !== -1 || path.indexOf('/register') !== -1 || path.indexOf('/reset') !== -1;
-    if (isAuthPage) {
-      if (btn) btn.style.display = 'none';
-      if (panel) panel.style.display = 'none';
-      return;
-    }
-    if (btn) btn.style.display = 'flex';
-
     const close = document.getElementById('sx-ai-close');
     const input = document.getElementById('sx-ai-input');
     const send = document.getElementById('sx-ai-send');
     const messages = document.getElementById('sx-ai-messages');
 
     if (!btn || !panel) return;
-    if (btn.dataset.init) return;  // prevent double-init
-    btn.dataset.init = '1';
 
     btn.addEventListener('click', () => panel.classList.toggle('open'));
     close.addEventListener('click', () => panel.classList.remove('open'));
@@ -251,28 +169,25 @@
     async function ask() {
       const question = input.value.trim();
       if (!question) return;
+
       addMessage(question, 'user');
       input.value = '';
       send.disabled = true;
+
       const loading = addMessage('Thinking...', 'bot loading');
+
       try {
         const res = await fetch(N8N_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ question: question })
         });
-        const text = await res.text();
+        const data = await res.json();
         loading.remove();
-        if (!text || text.trim() === '' || text.trim() === '""') {
-          addMessage('The AI service is reachable, but the database query returned nothing. Check that the n8n PostgreSQL credential is set and the data source (172.16.0.119) is reachable.', 'bot');
-          return;
-        }
-        let data;
-        try { data = JSON.parse(text); } catch (e) { data = { answer: text }; }
         addMessage(data.answer || 'Sorry, I could not get an answer.', 'bot');
       } catch (err) {
         loading.remove();
-        addMessage('Could not reach the AI service (network/CORS). Make sure n8n is running on port 5678.', 'bot');
+        addMessage('Error connecting to AI service. Please try again.', 'bot');
       } finally {
         send.disabled = false;
       }
@@ -287,6 +202,6 @@
   } else {
     init();
   }
-  setTimeout(init, 1500);
+  setTimeout(init, 1500);  // retry for React-rendered pages
 })();
 </script>
