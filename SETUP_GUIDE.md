@@ -18,7 +18,7 @@ Install these on your machine:
 | Python | 3.10 | https://www.python.org/downloads/release/python-31011/ |
 | PostgreSQL | 18 (or 16+) | https://www.postgresql.org/download/ |
 | Node.js | LTS | https://nodejs.org/ (needed for n8n) |
-| Ollama | latest | https://ollama.com/download (for AI chat) |
+| Google Gemini | API key | https://aistudio.google.com/ (for AI chat) |
 | Git | latest | https://git-scm.com/ |
 
 Verify installs:
@@ -26,7 +26,6 @@ Verify installs:
 python --version        # should be 3.10.x
 psql --version          # should be 18.x
 node --version
-ollama --version
 git --version
 ```
 
@@ -48,7 +47,7 @@ cd superset
 python -m venv venv_310
 
 # Activate (Windows PowerShell)
-.\venv_310\Scripts\Activate.ps1
+
 
 # Upgrade pip and install dependencies
 pip install --upgrade pip setuptools wheel
@@ -132,11 +131,20 @@ copy static\assets\SXfavicon.svg venv_310\Lib\site-packages\superset\static\asse
 
 ## 7. Start Superset
 
+You can start both **n8n** and **Superset** together using the automated startup script:
 ```powershell
-# Make sure venv is activated, then:
+.\start_dev.ps1
+```
+
+Alternatively, to start Superset manually (make sure venv is activated):
+```powershell
 $env:SUPERSET_CONFIG_PATH = "$PWD\superset_config.py"
 
-superset run -p 5000 --with-threads --reload
+# If superset.exe is blocked or has launcher path issues, run via the helper script:
+python run_superset.py run -p 5000 --with-threads --reload
+
+# Otherwise run the default command:
+# superset run -p 5000 --with-threads --reload
 ```
 
 Open **http://127.0.0.1:5000**
@@ -152,22 +160,17 @@ You should see:
 
 ## ✅ At this point, Superset is fully working (dashboards + charts).
 
-The AI chat (Part 8 below) is optional and needs n8n + Ollama.
+The AI chat (Part 8 below) is optional and needs n8n + Gemini API Key.
 
 ---
 
 ## 8. AI Chat Setup (Optional but recommended)
 
-The chat widget is already embedded (from step 6). It needs n8n + Ollama running to work.
+The chat widget is already embedded (from step 6). It needs n8n + Google Gemini API Key.
 
-### 8a. Install the AI model
-```powershell
-ollama pull qwen2.5-coder:7b
-```
-Verify:
-```powershell
-ollama list      # should show qwen2.5-coder:7b
-```
+### 8a. Get a Gemini API Key
+Obtain a Google Gemini API Key from [Google AI Studio](https://aistudio.google.com/).
+Create the key and save it. You will configure this key in your n8n workflow.
 
 ### 8b. Install and start n8n
 ```powershell
@@ -243,17 +246,20 @@ Expected:
    - "How many schools are onboarded?"
    - "How many government schools?"
 
-First response is slow (~30-60s) because Ollama runs on CPU.
+Responses from Gemini are fast and processed on Google's hosted infrastructure.
 
 ---
 
 ## Daily Startup (after first setup)
 
-Three things need to run:
-
+You can launch both n8n and Superset with a single command:
 ```powershell
-# Terminal 1: Ollama (usually auto-starts in background; verify)
-ollama list
+.\start_dev.ps1
+```
+
+If you prefer starting them manually in separate windows:
+```powershell
+# Terminal 1: n8n
 
 # Terminal 2: n8n
 n8n start
@@ -262,7 +268,7 @@ n8n start
 cd path\to\superset
 .\venv_310\Scripts\Activate.ps1
 $env:SUPERSET_CONFIG_PATH = "$PWD\superset_config.py"
-superset run -p 5000 --with-threads
+python run_superset.py run -p 5000 --with-threads --reload
 ```
 
 ---
@@ -277,7 +283,7 @@ superset run -p 5000 --with-threads
 | Chat button missing | Widget not copied / on login page | Redo step 6; button only shows after login |
 | Chat "Error connecting" | n8n not running | `n8n start` |
 | Chat returns nothing | n8n credential missing | Create credentials (step 8d) |
-| Ollama timeout | Model not pulled | `ollama pull qwen2.5-coder:7b` |
+| Gemini API Error | API key wrong/missing | Paste a valid Google AI Studio API key in the n8n HTTP Request nodes |
 
 For deeper issues see `PRODUCTION_TROUBLESHOOTING.md`.
 
@@ -299,10 +305,10 @@ For deeper issues see `PRODUCTION_TROUBLESHOOTING.md`.
 |---------|--------------|
 | Superset | http://127.0.0.1:5000 |
 | n8n | http://localhost:5678 |
-| Ollama API | http://127.0.0.1:11434 |
+| Gemini API | https://generativelanguage.googleapis.com |
 | Data DB | 172.16.0.119:5432 (employee_db, org_db) |
 | Metadata DB | localhost:5432/superset |
-| AI model | qwen2.5-coder:7b |
+| AI model | gemini-2.5-flash |
 
 Other docs:
 - `ai_integration/README.md` - AI chat architecture

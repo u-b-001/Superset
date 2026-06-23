@@ -9,7 +9,7 @@ Everything a new team member needs to run this project locally and deploy it.
 A customized Apache Superset (v6.0.0) dashboard application for SamarthX (Goa education data), with:
 - Custom SamarthX branding (logo, colors, favicon)
 - 2 dashboards, 17 charts (employee + school data)
-- An **AI chat assistant** (natural language → SQL) powered by n8n + Ollama
+- An **AI chat assistant** (natural language → SQL) powered by n8n + Google Gemini 2.5 Flash
 
 ---
 
@@ -25,14 +25,14 @@ A customized Apache Superset (v6.0.0) dashboard application for SamarthX (Goa ed
                 ▼
 ┌─────────────────────────────────────────────────────┐
 │  n8n (port 5678) - workflow engine                  │
-│   Webhook → Ollama (SQL) → Validate → Postgres →    │
-│   Ollama (format answer) → Respond                  │
+│   Webhook → Gemini (SQL) → Validate → Postgres →    │
+│   Gemini (format answer) → Respond                  │
 └───────┬──────────────────────────┬──────────────────┘
         │ LLM                       │ data query
         ▼                           ▼
 ┌──────────────┐         ┌────────────────────────────┐
-│ Ollama 11434 │         │ Data DB 172.16.0.119:5432  │
-│ qwen2.5-coder│         │ employee_db + org_db       │
+│  Gemini API  │         │ Data DB 172.16.0.119:5432  │
+│  2.5 Flash   │         │ employee_db + org_db       │
 └──────────────┘         └────────────────────────────┘
 
 Superset metadata DB: PostgreSQL localhost:5432/superset
@@ -80,7 +80,7 @@ Send your teammate through a secure channel (password manager / encrypted messag
 - Python 3.10
 - PostgreSQL 18 (or 16+)
 - Node.js (for n8n)
-- Ollama
+- Google Gemini API Key
 
 ### Step 1: Clone the repo
 ```bash
@@ -148,21 +148,22 @@ copy static\assets\SXfavicon.svg venv_310\Lib\site-packages\superset\static\asse
 $env:SUPERSET_CONFIG_PATH="$PWD\superset_config.py"   # Windows
 # export SUPERSET_CONFIG_PATH=$PWD/superset_config.py  # Linux
 
-superset run -p 5000 --with-threads --reload
+# If superset is blocked by Windows Application Control or shebang issues:
+python run_superset.py run -p 5000 --with-threads --reload
+
+# Otherwise:
+# superset run -p 5000 --with-threads --reload
 ```
 Open http://127.0.0.1:5000 - dashboards + logo should appear.
 
 ---
 
-## PART C: AI Chat Setup (n8n + Ollama)
+## PART C: AI Chat Setup (n8n + Gemini)
 
-The AI chat needs n8n and Ollama running. Setup details are in `ai_integration/`.
+The AI chat needs n8n and a Google Gemini API Key. Setup details are in `ai_integration/`.
 
-### Step 1: Install Ollama + model
-```bash
-# Install Ollama from https://ollama.com
-ollama pull qwen2.5-coder:7b
-```
+### Step 1: Get a Gemini API Key
+Create an API key in Google AI Studio and configure it in the HTTP Request nodes inside n8n.
 
 ### Step 2: Install + start n8n
 ```bash
@@ -255,10 +256,10 @@ superset/
 | Superset version | 6.0.0 |
 | Python | 3.10 |
 | PostgreSQL | 18 |
-| AI model | qwen2.5-coder:7b |
+| AI model | gemini-2.5-flash |
 | Local Superset | http://127.0.0.1:5000 |
 | n8n | http://localhost:5678 |
-| Ollama API | http://127.0.0.1:11434 |
+| Gemini API | https://generativelanguage.googleapis.com |
 | Data DB | 172.16.0.119:5432 (employee_db, org_db) |
 | Production server | 172.16.0.106 (bot.demosamarthx.du.ac.in) |
 

@@ -6,28 +6,21 @@ Step-by-step to build the AI chat workflow in n8n.
 
 ## Prerequisites Checklist
 
-- [ ] Ollama running (port 11434) with model pulled
+- [ ] Google AI Studio API key (obtain from [Google AI Studio](https://aistudio.google.com/))
 - [ ] n8n running (port 5678)
 - [ ] PostgreSQL data source reachable (172.16.0.119)
 - [ ] Network/VPN connected to reach data source
 
-### Pull the model first:
-```bash
-ollama pull qwen2.5-coder:7b
-```
-
-### Verify model works:
-```bash
-ollama run qwen2.5-coder:7b "Write a PostgreSQL query to count rows in a table named employees"
-```
+### Get a Gemini API Key:
+Create an API key in Google AI Studio. This will be used in the URL parameters of both HTTP Request nodes in n8n.
 
 ---
 
 ## Workflow Overview
 
 ```
-Webhook → Build Prompt → Ollama (text→SQL) → Validate SQL → 
-PostgreSQL → Ollama (format answer) → Respond
+Webhook → Build Prompt → Gemini (text→SQL) → Validate SQL → 
+PostgreSQL → Gemini (format answer) → Respond
 ```
 
 7 nodes total.
@@ -72,21 +65,29 @@ return [{
 
 ---
 
-### Node 3: HTTP Request (Ollama - Generate SQL)
+### Node 3: HTTP Request (Gemini - Generate SQL)
 - Type: **HTTP Request**
 - Method: **POST**
-- URL: `http://localhost:11434/api/generate`
+- URL: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_API_KEY`
 - Body (JSON):
 ```json
 {
-  "model": "qwen2.5-coder:7b",
-  "prompt": "={{ $json.fullPrompt }}",
-  "stream": false,
-  "options": { "temperature": 0 }
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "={{ $json.fullPrompt }}"
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0
+  }
 }
 ```
 
-Response contains the SQL in `response` field.
+Response contains the SQL in the nested path `candidates[0].content.parts[0].text`.
 
 ---
 
@@ -94,10 +95,10 @@ Response contains the SQL in `response` field.
 - Type: **Code**
 
 ```javascript
-let sql = $input.first().json.response.trim();
+let raw = $input.first().json.candidates[0].content.parts[0].text.trim();
 
-// Strip markdown code fences if present
-sql = sql.replace(/```sql/gi, '').replace(/```/g, '').trim();
+// Clean raw code fences
+let cleanedRaw = raw.replace(/```sql/gi, '').replace(/```/g, '').trim();
 
 // SAFETY: block dangerous keywords
 const forbidden = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|EXECUTE)\b/i;
@@ -137,17 +138,25 @@ return [{ json: { sql: sql, question: $('Set').first().json.question } }];
 
 ---
 
-### Node 6: HTTP Request (Ollama - Format answer)
+### Node 6: HTTP Request (Gemini - Format answer)
 - Type: **HTTP Request**
 - Method: **POST**
-- URL: `http://localhost:11434/api/generate`
+- URL: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=YOUR_API_KEY`
 - Body (JSON):
 ```json
 {
-  "model": "qwen2.5-coder:7b",
-  "prompt": "The user asked: {{ $('Code').first().json.question }}\n\nThe query returned this data: {{ JSON.stringify($json) }}\n\nWrite a short, clear, natural-language answer for a non-technical user. Be concise.",
-  "stream": false,
-  "options": { "temperature": 0.3 }
+  "contents": [
+    {
+      "parts": [
+        {
+          "text": "=The user asked: {{ $('Validate and Route').first().json.question }}\n\nThe query returned this data: {{ JSON.stringify($json) }}\n\nWrite a short, clear, natural-language answer for a non-technical user. Be concise. Only state the answer."
+        }
+      ]
+    }
+  ],
+  "generationConfig": {
+    "temperature": 0.3
+  }
 }
 ```
 
@@ -158,7 +167,7 @@ return [{ json: { sql: sql, question: $('Set').first().json.question } }];
 - Respond With: **JSON**
 - Body:
 ```json
-{ "answer": "={{ $json.response }}" }
+{ "answer": "={{ $json.candidates[0].content.parts[0].text }}" }
 ```
 
 ---
@@ -198,7 +207,7 @@ For MVP, start with `employee_db` only (most questions are about employees/teach
 
 | Problem | Fix |
 |---------|-----|
-| Ollama slow | Normal on CPU. Use smaller model or add GPU |
+| Gemini API Error | Make sure you replaced YOUR_API_KEY with a valid Google AI Studio API key and the n8n machine has outbound internet access |
 | SQL has markdown fences | Node 4 strips them |
 | Connection timeout to .119 | Check VPN/network |
 | Wrong table errors | Improve schema prompt detail |

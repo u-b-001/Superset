@@ -142,9 +142,12 @@
   // Local test:  http://localhost:5678/webhook/ai-chat
   // Production:  https://your-n8n-domain/webhook/ai-chat
   // ═══════════════════════════════════════════════════════════
-  const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/ai-chat';
+  const N8N_WEBHOOK_URL = '/api/ai-chat';
+  const chatHistory = [];
 
   function init() {
+    // Avoid double initialization if init is retried
+    if (window.sx_ai_initialized) return;
     const btn = document.getElementById('sx-ai-button');
     const panel = document.getElementById('sx-ai-panel');
     const close = document.getElementById('sx-ai-close');
@@ -153,6 +156,7 @@
     const messages = document.getElementById('sx-ai-messages');
 
     if (!btn || !panel) return;
+    window.sx_ai_initialized = true;
 
     btn.addEventListener('click', () => panel.classList.toggle('open'));
     close.addEventListener('click', () => panel.classList.remove('open'));
@@ -180,11 +184,23 @@
         const res = await fetch(N8N_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: question })
+          body: JSON.stringify({ question: question, history: chatHistory })
         });
         const data = await res.json();
         loading.remove();
-        addMessage(data.answer || 'Sorry, I could not get an answer.', 'bot');
+        
+        const answer = data.answer || 'Sorry, I could not get an answer.';
+        addMessage(answer, 'bot');
+        
+        // Add current turn to history
+        chatHistory.push({ role: 'user', content: question });
+        chatHistory.push({ role: 'assistant', content: answer });
+        
+        // Cap history to last 5 turns (10 messages) to prevent token bloat
+        if (chatHistory.length > 10) {
+          chatHistory.shift();
+          chatHistory.shift();
+        }
       } catch (err) {
         loading.remove();
         addMessage('Error connecting to AI service. Please try again.', 'bot');

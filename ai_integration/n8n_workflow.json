@@ -18,7 +18,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const systemPrompt = `You are a PostgreSQL expert for the SamarthX education database (Goa state). Convert the user question into ONE valid PostgreSQL SELECT query.\n\nOUTPUT FORMAT (MANDATORY):\nLine 1: DATABASE: employee_db   (or)   DATABASE: org_db\nLine 2+: the raw SQL (no markdown, no code fences, no explanation)\n\nRULES:\n1. ONLY SELECT. NEVER INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE.\n2. Add LIMIT 1000 unless it is a COUNT/aggregate.\n3. Use schema-qualified names.\n4. For categorical TEXT comparisons use LOWER(TRIM(column)).\n5. Use COUNT(*) for counts.\n\n=== DATABASE employee_db ===\nTABLE goa.employees. Columns: id, employee_user_id, salutation, first_name, middle_name, last_name, gender, date_of_birth, main_stream, sub_appointment_type, employee_under, blood_group, marital_status, nationality, religion, social_category, join_under_which_category, disability_type, nature_of_appointment, is_active, date_of_joining_service, date_of_joining_present_school, is_single_onboarded, login_disabled, employee_type, created_at, updated_at, deleted_at\nVALUES: employee_type = 'TEACHING STAFF' | 'NON-TEACHING STAFF' | 'VOCATIONAL TEACHER'.\n- teacher/teaching -> 'TEACHING STAFF'; non-teaching -> 'NON-TEACHING STAFF'\n- gender is messy: use LOWER(TRIM(gender)) = 'female' or 'male'\n- ALWAYS add: WHERE deleted_at IS NULL\n\n=== DATABASE org_db ===\nTABLE goa.schools. Columns: id, school_user_id, udise_code, school_name, school_type, school_type_gender, instruction_medium, affiliated_board_secondary, affiliated_board_higher, school_management_type, managing_trust_society_name, year_of_establishment, school_level, grades_offered, school_timing, employees_verified, students_verified, is_archived, status, admission_enabled, created_at, updated_at, deleted_at\nVALUES: school_management_type = 'State Govt','Society','Trust','Privately Managed','Central Govt', etc. school_type = 'Govt School','Aided School','Unaided School','Private School', etc.\n- ALWAYS add: WHERE deleted_at IS NULL AND is_archived = false\n\nROUTING: If the question is about schools, use org_db. If about employees/teachers/staff, use employee_db.\n\nEXAMPLES:\nQ: How many teachers are in Goa?\nDATABASE: employee_db\nSELECT COUNT(*) FROM goa.employees WHERE employee_type = 'TEACHING STAFF' AND deleted_at IS NULL;\n\nQ: How many schools are onboarded?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE deleted_at IS NULL AND is_archived = false;\n\nQ: How many government schools?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE LOWER(TRIM(school_management_type)) = 'state govt' AND deleted_at IS NULL AND is_archived = false;\n\nUser question follows.`;\n\nconst question = $input.first().json.body.question;\n\nreturn [{ json: { question: question, fullPrompt: systemPrompt + '\\n\\nUser question: ' + question } }];"
+        "jsCode": "const systemPrompt = `You are a PostgreSQL expert for the SamarthX education database (Goa state). Convert the user question into ONE valid PostgreSQL SELECT query.\n\nOUTPUT FORMAT (MANDATORY):\nLine 1: DATABASE: employee_db   (or)   DATABASE: org_db\nLine 2+: the raw SQL (no markdown, no code fences, no explanation)\n\nRULES:\n1. ONLY SELECT. NEVER INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE.\n2. Add LIMIT 1000 unless it is a COUNT/aggregate.\n3. Use schema-qualified names.\n4. For categorical TEXT comparisons use LOWER(TRIM(column)).\n5. Use COUNT(*) for counts.\n6. When asked to \"list\", \"name\", \"show\", or \"tell names of\" schools, select the \"school_name\" column. For employees/staff, select \"first_name\", \"middle_name\", and \"last_name\".\n7. Follow-up queries: If the user asks a follow-up to list or name items from the previous turn, use the exact same WHERE clauses/filters as the previous turn's query (e.g. if you filtered by 'individual' in the previous turn, continue filtering by 'individual').\n\n=== DATABASE employee_db ===\nTABLE goa.employees. Columns: id, employee_user_id, salutation, first_name, middle_name, last_name, gender, date_of_birth, main_stream, sub_appointment_type, employee_under, blood_group, marital_status, nationality, religion, social_category, join_under_which_category, disability_type, nature_of_appointment, is_active, date_of_joining_service, date_of_joining_present_school, is_single_onboarded, login_disabled, employee_type, created_at, updated_at, deleted_at\nVALUES: employee_type = 'TEACHING STAFF' | 'NON-TEACHING STAFF' | 'VOCATIONAL TEACHER'.\n- teacher/teaching -> 'TEACHING STAFF'; non-teaching -> 'NON-TEACHING STAFF'\n- gender is messy: use LOWER(TRIM(gender)) = 'female' or 'male'\n- ALWAYS add: WHERE deleted_at IS NULL\n\n=== DATABASE org_db ===\nTABLE goa.schools. Columns: id, school_user_id, udise_code, school_name, school_type, school_type_gender, instruction_medium, affiliated_board_secondary, affiliated_board_higher, school_management_type, managing_trust_society_name, year_of_establishment, school_level, grades_offered, school_timing, employees_verified, students_verified, is_archived, status, admission_enabled, created_at, updated_at, deleted_at\nVALUES: school_management_type = 'State Govt','Society','Trust','Privately Managed','Central Govt', etc. school_type = 'Govt School','Aided School','Unaided School','Private School', etc.\n- ALWAYS add: WHERE deleted_at IS NULL AND is_archived = false\n\nROUTING: If the question is about schools, use org_db. If about employees/teachers/staff, use employee_db.\n\nEXAMPLES:\nQ: How many teachers are in Goa?\nDATABASE: employee_db\nSELECT COUNT(*) FROM goa.employees WHERE employee_type = 'TEACHING STAFF' AND deleted_at IS NULL;\n\nQ: How many schools are onboarded?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE deleted_at IS NULL AND is_archived = false;\n\nQ: How many government schools?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE LOWER(TRIM(school_management_type)) = 'state govt' AND deleted_at IS NULL AND is_archived = false;\n\nUser question follows.`;\n\nconst body = $input.first().json.body;\nconst question = body.question;\nconst history = body.history || [];\n\nlet historyText = '';\nif (history.length > 0) {\n  historyText = '=== CONVERSATION HISTORY ===\\n' + history.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\\n') + '\\n\\n';\n}\n\nreturn [{ json: { question: question, fullPrompt: systemPrompt + '\\n\\n' + historyText + 'User question: ' + question } }];"
       },
       "id": "build-prompt",
       "name": "Build Prompt",
@@ -29,21 +29,26 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=YOUR_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:7b\",\n  \"prompt\": {{ JSON.stringify($json.fullPrompt) }},\n  \"stream\": false,\n  \"options\": { \"temperature\": 0 }\n}",
-        "options": {}
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify($json.fullPrompt) }}\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0\n  }\n}",
+        "options": {
+          "timeout": 300000
+        }
       },
-      "id": "ollama-sql",
-      "name": "Ollama Generate SQL",
+      "id": "gemini-sql",
+      "name": "Gemini Generate SQL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [640, 300]
+      "position": [640, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "delayBetweenTries": 5000
     },
     {
       "parameters": {
-        "jsCode": "let raw = $input.first().json.response.trim();\nraw = raw.replace(/```sql/gi, '').replace(/```/g, '').trim();\n\n// Extract DATABASE marker\nlet db = 'employee_db';\nconst dbMatch = raw.match(/DATABASE:\\s*(employee_db|org_db)/i);\nif (dbMatch) { db = dbMatch[1].toLowerCase(); }\n\n// Remove the DATABASE line to get pure SQL\nlet sql = raw.replace(/DATABASE:\\s*(employee_db|org_db)\\s*/i, '').trim();\n\n// SAFETY\nconst forbidden = /\\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|EXECUTE)\\b/i;\nif (forbidden.test(sql)) { throw new Error('Unsafe SQL blocked: ' + sql); }\nif (!/^\\s*SELECT/i.test(sql)) { throw new Error('Only SELECT allowed: ' + sql); }\nif (!/LIMIT/i.test(sql) && !/COUNT|SUM|AVG|MIN|MAX|GROUP BY/i.test(sql)) {\n  sql = sql.replace(/;?\\s*$/, '') + ' LIMIT 1000';\n}\n\nreturn [{ json: { db: db, sql: sql, question: $('Build Prompt').first().json.question } }];"
+        "jsCode": "let raw = $input.first().json.candidates[0].content.parts[0].text.trim();\n\n// Extract DATABASE marker\nlet db = '';\nconst dbMatch = raw.match(/DATABASE:\\s*(employee_db|org_db)/i);\nif (dbMatch) {\n  db = dbMatch[1].toLowerCase();\n}\n\n// Clean raw code fences\nlet cleanedRaw = raw.replace(/```sql/gi, '').replace(/```/g, '').trim();\n\n// Extract SELECT statement\nlet sql = '';\nlet sqlMatch = cleanedRaw.match(/(SELECT[\\s\\S]+?)(;|$)/i);\nif (sqlMatch) {\n  sql = sqlMatch[1].trim();\n} else {\n  sql = cleanedRaw;\n}\n\n// Fallback database selection if marker not found\nif (!db) {\n  if (/schools/i.test(sql)) {\n    db = 'org_db';\n  } else if (/employees/i.test(sql)) {\n    db = 'employee_db';\n  } else {\n    db = 'employee_db';\n  }\n}\n\n// SAFETY\nconst forbidden = /\\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|EXECUTE)\\b/i;\nif (forbidden.test(sql)) { throw new Error('Unsafe SQL blocked: ' + sql); }\nif (!/^\\s*SELECT/i.test(sql)) { throw new Error('Only SELECT allowed: ' + sql); }\nif (!/LIMIT/i.test(sql) && !/COUNT|SUM|AVG|MIN|MAX|GROUP BY/i.test(sql)) {\n  sql = sql.replace(/;?\\s*$/, '') + ' LIMIT 1000';\n}\n\nreturn [{ json: { db: db, sql: sql, question: $('Build Prompt').first().json.question } }];"
       },
       "id": "validate-sql",
       "name": "Validate and Route",
@@ -106,40 +111,57 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://127.0.0.1:11434/api/generate",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent?key=YOUR_API_KEY",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"model\": \"qwen2.5-coder:7b\",\n  \"prompt\": {{ JSON.stringify('The user asked: ' + $('Validate and Route').first().json.question + '\\n\\nThe query returned: ' + JSON.stringify($input.all().map(i => i.json)) + '\\n\\nWrite a short, clear, natural-language answer for a non-technical user. Be concise. Only state the answer.') }},\n  \"stream\": false,\n  \"options\": { \"temperature\": 0.3 }\n}",
-        "options": {}
+        "jsonBody": "={\n  \"contents\": [\n    {\n      \"parts\": [\n        {\n          \"text\": {{ JSON.stringify('The user asked: ' + $('Validate and Route').first().json.question + '\\n\\nThe database query returned ' + $input.all().length + ' rows.\\n\\nHere is a sample of the first 10 rows: ' + JSON.stringify($input.all().map(i => i.json).slice(0, 10)) + '\\n\\nWrite a short, clear, natural-language response. If there are many rows, display the first few nicely and mention the total count. Only state the response.') }}\n        }\n      ]\n    }\n  ],\n  \"generationConfig\": {\n    \"temperature\": 0.3\n  }\n}",
+        "options": {
+          "timeout": 300000
+        }
       },
-      "id": "ollama-format",
-      "name": "Ollama Format Answer",
+      "id": "gemini-format",
+      "name": "Gemini Format Answer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1480, 300]
+      "position": [1480, 300],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "delayBetweenTries": 5000
     },
     {
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={\n  \"answer\": {{ JSON.stringify($json.response) }}\n}"
+        "responseBody": "={\n  \"answer\": {{ JSON.stringify($json.candidates[0].content.parts[0].text) }}\n}"
       },
       "id": "respond",
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [1700, 300]
+    },
+    {
+      "parameters": {
+        "amount": 4,
+        "unit": "seconds"
+      },
+      "id": "wait-node",
+      "name": "Wait 4 Seconds",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [1380, 300]
     }
   ],
   "connections": {
     "Webhook": { "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]] },
-    "Build Prompt": { "main": [[{ "node": "Ollama Generate SQL", "type": "main", "index": 0 }]] },
-    "Ollama Generate SQL": { "main": [[{ "node": "Validate and Route", "type": "main", "index": 0 }]] },
+    "Build Prompt": { "main": [[{ "node": "Gemini Generate SQL", "type": "main", "index": 0 }]] },
+    "Gemini Generate SQL": { "main": [[{ "node": "Validate and Route", "type": "main", "index": 0 }]] },
     "Validate and Route": { "main": [[{ "node": "Is School Query", "type": "main", "index": 0 }]] },
     "Is School Query": { "main": [[{ "node": "Query Org DB", "type": "main", "index": 0 }], [{ "node": "Query Employee DB", "type": "main", "index": 0 }]] },
-    "Query Org DB": { "main": [[{ "node": "Ollama Format Answer", "type": "main", "index": 0 }]] },
-    "Query Employee DB": { "main": [[{ "node": "Ollama Format Answer", "type": "main", "index": 0 }]] },
-    "Ollama Format Answer": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Query Org DB": { "main": [[{ "node": "Wait 4 Seconds", "type": "main", "index": 0 }]] },
+    "Query Employee DB": { "main": [[{ "node": "Wait 4 Seconds", "type": "main", "index": 0 }]] },
+    "Wait 4 Seconds": { "main": [[{ "node": "Gemini Format Answer", "type": "main", "index": 0 }]] },
+    "Gemini Format Answer": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
   },
   "settings": { "executionOrder": "v1" },
-  "active": false
+  "active": true
 }

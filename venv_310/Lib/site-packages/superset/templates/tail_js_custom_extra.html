@@ -211,7 +211,7 @@
   'use strict';
 
   // UPDATE for production: https://your-n8n-domain/webhook/ai-chat
-  const N8N_WEBHOOK_URL = 'http://localhost:5678/webhook/ai-chat';
+  const N8N_WEBHOOK_URL = '/api/ai-chat';
 
   function init() {
     const btn = document.getElementById('sx-ai-button');
@@ -251,6 +251,14 @@
     async function ask() {
       const question = input.value.trim();
       if (!question) return;
+
+      // Collect chat history (excluding loading and intro messages)
+      const messageDivs = Array.from(messages.querySelectorAll('.sx-msg'));
+      const history = messageDivs.slice(-6).map(div => ({
+        role: div.classList.contains('user') ? 'user' : 'assistant',
+        content: div.textContent.replace('Thinking...', '').trim()
+      })).filter(msg => msg.content && !msg.content.startsWith('Hi! Ask me anything'));
+
       addMessage(question, 'user');
       input.value = '';
       send.disabled = true;
@@ -259,7 +267,7 @@
         const res = await fetch(N8N_WEBHOOK_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: question })
+          body: JSON.stringify({ question: question, history: history })
         });
         const text = await res.text();
         loading.remove();

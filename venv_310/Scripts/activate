@@ -38,7 +38,7 @@ deactivate () {
 # unset irrelevant variables
 deactivate nondestructive
 
-VIRTUAL_ENV="C:\Users\Admin\Downloads\superset 2\superset 2\superset\venv_310"
+VIRTUAL_ENV="C:\Users\Admin\Desktop\samarthx superset\170626\Superset\venv_310"
 export VIRTUAL_ENV
 
 _OLD_VIRTUAL_PATH="$PATH"

@@ -1,6 +1,6 @@
 # Database Schema & System Prompt for Text-to-SQL
 
-System prompt for qwen2.5-coder. Based on the REAL physical schema of the data
+System prompt for gemini-2.5-flash. Based on the REAL physical schema of the data
 source (172.16.0.119), verified against actual data values.
 
 ---

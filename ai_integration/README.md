@@ -1,6 +1,6 @@
 # SamarthX AI Chat Integration
 
-Natural Language → Dashboard Insights for Superset using n8n + Ollama (local LLM).
+Natural Language → Dashboard Insights for Superset using n8n + Google Gemini (cloud LLM).
 
 Ask questions in plain English, get answers from your data.
 
@@ -13,18 +13,18 @@ User types question in chat widget (inside Superset)
         ↓
 n8n webhook receives it
         ↓
-Ollama (qwen2.5-coder) converts question → SQL
+Gemini (gemini-2.5-flash) converts question → SQL
         ↓
 SQL safety validation (SELECT-only)
         ↓
 PostgreSQL runs query (read-only user)
         ↓
-Ollama formats result → plain English
+Gemini formats result → plain English
         ↓
 Answer appears in chat widget
 ```
 
-All AI runs **locally** (Ollama) - no data sent to cloud. Good for government data privacy.
+AI requests are sent to Google Gemini (cloud API) using your secure API key.
 
 ---
 
@@ -41,14 +41,9 @@ All AI runs **locally** (Ollama) - no data sent to cloud. Good for government da
 
 ## Setup Order
 
-### Step 1: Pull the AI model
-```bash
-ollama pull qwen2.5-coder:7b
-```
-Verify:
-```bash
-ollama run qwen2.5-coder:7b "count rows in employees table in postgres"
-```
+### Step 1: Get a Gemini API Key
+Obtain a Gemini API key from [Google AI Studio](https://aistudio.google.com/).
+Configure this key in both HTTP Request nodes in n8n.
 
 ### Step 2: Start n8n
 ```bash
@@ -83,7 +78,7 @@ curl -X POST http://localhost:5678/webhook/ai-chat \
 |-----------|-------|------|---------|
 | Superset | local / 172.16.0.106 | 8088 | Dashboards + chat widget |
 | n8n | local / server | 5678 | Workflow orchestration |
-| Ollama | local / server | 11434 | Local LLM |
+| Gemini API | Google Cloud | 443 | Google Gemini 2.5 Flash |
 | PostgreSQL (data) | 172.16.0.119 | 5432 | The actual data |
 
 ---
@@ -94,22 +89,22 @@ curl -X POST http://localhost:5678/webhook/ai-chat \
 2. **SQL keyword blocking** - INSERT/UPDATE/DELETE/DROP rejected in n8n
 3. **SELECT-only enforcement** - queries must start with SELECT
 4. **Row limit** - auto LIMIT 1000 on non-aggregate queries
-5. **Local LLM** - data never leaves your infrastructure
+5. **Secure API Key** - requests are authenticated directly via Google AI Studio API
 
 ---
 
 ## Privacy Note
 
 Only the **database schema** (table/column names) is sent to the LLM, plus the
-query results for formatting. Since Ollama runs locally, even that stays on your
-server. No external API calls. Ideal for government/sensitive data.
+query results for formatting. Since Gemini is hosted, schema and queries are sent to
+Google's cloud API. Ensure compliance with your organization's data privacy policies.
 
 ---
 
 ## Production Deployment
 
 When deploying to 172.16.0.106:
-1. Install Ollama on the server, pull the model
+1. Configure the Gemini API key in n8n on the production server
 2. Install n8n on the server (or a dedicated VM)
 3. Import the n8n workflow
 4. Copy `tail_js_custom_extra.html` (with chat widget) to the server's venv
@@ -124,7 +119,7 @@ When deploying to 172.16.0.106:
 - [x] System prompt written
 - [x] n8n workflow guide
 - [x] Chat widget built
-- [ ] Pull model
+- [ ] Get Gemini API Key
 - [ ] Build n8n workflow
 - [ ] Test webhook
 - [ ] Embed widget
