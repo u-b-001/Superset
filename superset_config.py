@@ -335,8 +335,37 @@ def FLASK_APP_MUTATOR(app):
 
     @app.route('/api/ai-chat', methods=['POST'])
     def ai_chat_proxy():
-        ensure_n8n_running()
         try:
+            req_data = request.json or {}
+            question = req_data.get('question', '')
+
+            # ── Open-Source SLM Input Guardrail ──
+            try:
+                import sys
+                from pathlib import Path
+                ai_int_path = str(Path(__file__).parent / "ai_integration")
+                if ai_int_path not in sys.path:
+                    sys.path.insert(0, ai_int_path)
+                from guardrails import guardrail
+
+                guard_result = guardrail.evaluate(question)
+                if not guard_result.is_allowed:
+                    import json
+                    return Response(
+                        json.dumps({
+                            "answer": guard_result.message,
+                            "guardrail_blocked": True,
+                            "category": guard_result.category
+                        }),
+                        status=200,
+                        headers={'Content-Type': 'application/json'}
+                    )
+            except Exception as ge:
+                import logging
+                logging.getLogger("superset").warning(f"Guardrail evaluation error: {ge}")
+
+            ensure_n8n_running()
+
             n8n_url = os.environ.get('N8N_WEBHOOK_URL', 'http://127.0.0.1:5678/webhook/ai-chat')
             resp = requests.post(
                 n8n_url,

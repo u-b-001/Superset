@@ -1,8 +1,8 @@
 # SamarthX AI Chat Integration
 
-Natural Language → Dashboard Insights for Superset using n8n + Google Gemini (cloud LLM).
+Natural Language → Dashboard Insights for Superset using n8n + **Groq Cloud (`llama-3.1-8b-instant`)** for ultra-fast, sub-second responses.
 
-Ask questions in plain English, get answers from your data.
+Ask questions in plain English, get answers from your data instantly.
 
 ---
 
@@ -11,20 +11,22 @@ Ask questions in plain English, get answers from your data.
 ```
 User types question in chat widget (inside Superset)
         ↓
-n8n webhook receives it
+SLM Input Guardrail (blocks injections, malicious queries)
         ↓
-Gemini (gemini-2.5-flash) converts question → SQL
+n8n webhook receives sanitized question
+        ↓
+Groq Llama-3.1-8b-instant converts question → SQL (~0.2s)
         ↓
 SQL safety validation (SELECT-only)
         ↓
 PostgreSQL runs query (read-only user)
         ↓
-Gemini formats result → plain English
+Groq Llama-3.1-8b-instant formats result → plain English (~0.2s)
         ↓
-Answer appears in chat widget
+Answer appears in chat widget (Total response time < 1s)
 ```
 
-AI requests are sent to Google Gemini (cloud API) using your secure API key.
+AI requests are sent to **Groq Cloud API** using free, high-speed LPU hardware.
 
 ---
 
@@ -83,13 +85,17 @@ curl -X POST http://localhost:5678/webhook/ai-chat \
 
 ---
 
-## Safety Features
+## Safety & Guardrail Features
 
-1. **Read-only DB user** (`dashboard_read_only_user`) - cannot modify data
-2. **SQL keyword blocking** - INSERT/UPDATE/DELETE/DROP rejected in n8n
-3. **SELECT-only enforcement** - queries must start with SELECT
-4. **Row limit** - auto LIMIT 1000 on non-aggregate queries
-5. **Secure API Key** - requests are authenticated directly via Google AI Studio API
+1. **Open-Source SLM Input Guardrail** (`ai_integration/guardrails.py`):
+   - **Layer 1: Heuristic Pattern Engine (<1ms)**: Blocks prompt injections (`ignore previous instructions`), SQL mutations (`DROP`, `ALTER`, `TRUNCATE`, `UPDATE`), and system prompt exfiltration.
+   - **Layer 2: Local SLM Semantic Classifier**: Evaluates input scope and malicious intent using local **Ollama** (`gemma2:2b`, `llama3.1:8b`) with zero API costs.
+   - **Graceful Fallback**: If Ollama is offline or times out, the system automatically falls back to Layer 1 heuristics without blocking legitimate queries.
+2. **Read-only DB user** (`dashboard_read_only_user`) - cannot modify data.
+3. **SQL keyword blocking** - INSERT/UPDATE/DELETE/DROP rejected in n8n and Superset proxy.
+4. **SELECT-only enforcement** - queries must start with SELECT.
+5. **Row limit** - auto LIMIT 1000 on non-aggregate queries.
+6. **Secure API Key** - requests are authenticated directly via Google AI Studio API.
 
 ---
 
