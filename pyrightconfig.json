@@ -1,0 +1,16 @@
+{
+  "include": [
+    "."
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "venv_310"
+  ],
+  "venvPath": ".",
+  "venv": "venv_310",
+  "extraPaths": [
+    ".",
+    "ai_integration"
+  ]
+}

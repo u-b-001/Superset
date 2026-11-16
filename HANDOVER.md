@@ -19,9 +19,19 @@ A customized Apache Superset (v6.0.0) dashboard application for SamarthX (Goa ed
 ┌─────────────────────────────────────────────────────┐
 │  Superset (port 5000 local / 8088 prod)             │
 │  - Dashboards + Charts                              │
+│  - Live AI Stats HUD (Top-Right synchronized)       │
 │  - AI chat widget (bottom-right button)             │
+└───────────────┬───────────────────▲─────────────────┘
+                │                   │ Real-time stats &
+                │ WS chat messages  │ pipeline streaming
+                ▼                   │
+┌─────────────────────────────────────────────────────┐
+│  WebSocket Server (port 5001)                       │
+│  - Bidirectional Chat streaming                     │
+│  - Ollama Guardrail inspection (gemma2:2b)          │
+│  - Live Stats Extraction & Broadcast Engine         │
 └───────────────┬─────────────────────────────────────┘
-                │ AI questions
+                │ Proxy AI queries
                 ▼
 ┌─────────────────────────────────────────────────────┐
 │  n8n (port 5678) - workflow engine                  │
@@ -145,16 +155,14 @@ copy static\assets\SXfavicon.svg venv_310\Lib\site-packages\superset\static\asse
 
 ### Step 6: Start Superset
 ```bash
-$env:SUPERSET_CONFIG_PATH="$PWD\superset_config.py"   # Windows
-# export SUPERSET_CONFIG_PATH=$PWD/superset_config.py  # Linux
-
-# If superset is blocked by Windows Application Control or shebang issues:
+# Simply run the startup runner (automatically configures SUPERSET_CONFIG_PATH and warms up n8n & WebSocket services):
 python run_superset.py run -p 5000 --with-threads --reload
 
-# Otherwise:
-# superset run -p 5000 --with-threads --reload
+# Alternatively, run the full development environment script:
+# .\start_dev.ps1
 ```
-Open http://127.0.0.1:5000 - dashboards + logo should appear.
+Open http://127.0.0.1:5000 - dashboards + logo should appear. Both n8n and WebSocket services are automatically kept alive and healthy in the background.
+
 
 ---
 
@@ -268,4 +276,6 @@ superset/
 ## Key Documentation
 - **Production deploy:** `DEPLOYMENT_GUIDE.md`
 - **Troubleshooting:** `PRODUCTION_TROUBLESHOOTING.md`
-- **AI chat details:** `ai_integration/README.md`
+- **AI chat & Workflow:** `GUARDRAIL_AND_WORKFLOW_DOCUMENTATION.md`
+- **AI integration overview:** `ai_integration/README.md`
+

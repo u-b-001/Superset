@@ -94,16 +94,28 @@ GUEST_TOKEN_JWT_SECRET = os.environ.get(
     'CHANGE_ME_IN_ENV'
 )
 
-# CORS — allow your portal's domain to embed dashboards
+# CORS — allow origins for API, chat widget, and embedding dashboards
+ENABLE_CORS = True
 CORS_OPTIONS = {
     "supports_credentials": True,
     "allow_headers": ["*"],
     "resources": ["*"],
+    "methods": ["GET", "HEAD", "POST", "OPTIONS", "PUT", "DELETE"],
     "origins": [EMBEDDED_PORTAL_ORIGIN]
     if IS_PRODUCTION
     else [
-        "http://localhost:3777",  # your portal dev server
-        "http://localhost:8080",  # alternate local portal URL
+        "http://localhost:3777",
+        "http://localhost:8080",
+        "http://localhost:5000",
+        "http://127.0.0.1:5000",
+        "http://localhost:8088",
+        "http://127.0.0.1:8088",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5678",
+        "http://127.0.0.1:5678",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
     ],
 }
 
@@ -282,83 +294,120 @@ OVERRIDE_CSS = """
 """
 
 def ensure_n8n_running():
-    import socket
-    import subprocess
-    import time
-
-    # Check if port 5678 is already active
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.settimeout(0.5)
+    try:
+        from ai_integration.service_manager import ensure_n8n_running as _ensure_n8n
+        _ensure_n8n(timeout=35.0)
+    except Exception:
         try:
-            # If connect_ex returns 0, the port is open and n8n is running
-            if s.connect_ex(('127.0.0.1', 5678)) == 0:
-                return
+            import sys
+            from pathlib import Path
+            ai_dir = str(Path(__file__).parent / "ai_integration")
+            if ai_dir not in sys.path:
+                sys.path.insert(0, ai_dir)
+            from service_manager import ensure_n8n_running as _ensure_n8n
+            _ensure_n8n(timeout=35.0)
         except Exception:
             pass
 
-    # Start n8n in a separate background process
-    env = os.environ.copy()
-    env['NODE_OPTIONS'] = '--max-old-space-size=4096'
-    
+def ensure_ai_services_running():
     try:
-        creationflags = 0
-        if os.name == 'nt':
-            # On Windows, launch n8n in a new console window so it does not block/clutter the main Superset console
-            creationflags = subprocess.CREATE_NEW_CONSOLE
-            subprocess.Popen(['n8n', 'start'], env=env, shell=True, creationflags=creationflags)
-        else:
-            # On Linux/macOS, run in background and detach
-            with open(os.devnull, 'wb') as devnull:
-                subprocess.Popen(['n8n', 'start'], env=env, stdout=devnull, stderr=devnull, start_new_session=True)
-        
-        # Wait up to 10 seconds for n8n to start listening
-        for _ in range(20):
-            time.sleep(0.5)
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(0.2)
-                try:
-                    if s.connect_ex(('127.0.0.1', 5678)) == 0:
-                        # Give n8n a brief moment to register internal webhook routes after port opens
-                        time.sleep(5.0)
-                        break
-                except Exception:
-                    pass
+        from ai_integration.service_manager import ensure_all_services
+        ensure_all_services(wait_for_ready=False)
     except Exception:
-        # Gracefully handle situations where n8n is not installed locally
-        pass
+        try:
+            import sys
+            from pathlib import Path
+            ai_dir = str(Path(__file__).parent / "ai_integration")
+            if ai_dir not in sys.path:
+                sys.path.insert(0, ai_dir)
+            from service_manager import ensure_all_services
+            ensure_all_services(wait_for_ready=False)
+        except Exception:
+            pass
+
+def ensure_websocket_server_running():
+    ensure_ai_services_running()
+
 
 def FLASK_APP_MUTATOR(app):
-    ensure_n8n_running()
-    from flask import request, Response
+    ensure_ai_services_running()
+    import time
+    import json
     import requests
-    from superset.extensions import csrf
+    from flask import request, Response  # type: ignore
+    from superset.extensions import csrf  # type: ignore
 
-    @app.route('/api/ai-chat', methods=['POST'])
+    @app.after_request
+    def add_ai_cors_headers(response):
+        if request.path.startswith('/api/ai-chat'):
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, X-CSRFToken, *'
+            response.headers['Access-Control-Max-Age'] = '86400'
+        return response
+
+    @app.route('/api/ai-chat', methods=['GET', 'POST', 'OPTIONS'])
     def ai_chat_proxy():
-        try:
-            req_data = request.json or {}
-            question = req_data.get('question', '')
+        cors_headers = {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-CSRFToken, *',
+            'Access-Control-Max-Age': '86400',
+        }
 
-            # ── Open-Source SLM Input Guardrail ──
+        if request.method == 'OPTIONS':
+            return Response('', status=200, headers=cors_headers)
+
+        if request.method == 'GET':
+            return Response(
+                json.dumps({"status": "healthy", "service": "SamarthX AI Chat Proxy"}),
+                status=200,
+                headers={'Content-Type': 'application/json', **cors_headers}
+            )
+
+        start_time = time.time()
+        guard_info = {
+            "status": "SAFE",
+            "allowed": True,
+            "model": "gemma2:2b (Ollama)",
+            "check_type": "ollama_slm",
+            "latency_ms": 0.0
+        }
+        try:
+            req_data = request.get_json(silent=True) or {}
+            question = req_data.get('question', '')
+            print("\n" + "=" * 70, flush=True)
+            print(f"[SamarthX AI Chat] Incoming Question: \"{question}\"", flush=True)
+            print("=" * 70, flush=True)
+
+            # ── Open-Source SLM Input Guardrail (Ollama) ──
             try:
-                import sys
-                from pathlib import Path
-                ai_int_path = str(Path(__file__).parent / "ai_integration")
-                if ai_int_path not in sys.path:
-                    sys.path.insert(0, ai_int_path)
-                from guardrails import guardrail
+                try:
+                    from ai_integration.guardrails import guardrail  # type: ignore
+                except ImportError:
+                    import sys
+                    from pathlib import Path
+                    ai_int_path = str(Path(__file__).parent / "ai_integration")
+                    if ai_int_path not in sys.path:
+                        sys.path.insert(0, ai_int_path)
+                    from guardrails import guardrail  # type: ignore
 
                 guard_result = guardrail.evaluate(question)
+                guard_info = guard_result.to_dict()
+
+                print(f"[Ollama Guardrail] Status: {guard_info.get('status')} | Model: {guard_info.get('model')} | Latency: {guard_info.get('latency_ms')}ms", flush=True)
                 if not guard_result.is_allowed:
-                    import json
+                    print(f"[Ollama Guardrail] 🔴 BLOCKED! Reason: {guard_result.reason} (Category: {guard_result.category})", flush=True)
+                    print("=" * 70 + "\n", flush=True)
                     return Response(
                         json.dumps({
                             "answer": guard_result.message,
                             "guardrail_blocked": True,
-                            "category": guard_result.category
+                            "category": guard_result.category,
+                            "guardrail": guard_info
                         }),
                         status=200,
-                        headers={'Content-Type': 'application/json'}
+                        headers={'Content-Type': 'application/json', **cors_headers}
                     )
             except Exception as ge:
                 import logging
@@ -367,49 +416,95 @@ def FLASK_APP_MUTATOR(app):
             ensure_n8n_running()
 
             n8n_url = os.environ.get('N8N_WEBHOOK_URL', 'http://127.0.0.1:5678/webhook/ai-chat')
-            resp = requests.post(
-                n8n_url,
-                json=request.json,
-                headers={'Content-Type': 'application/json'},
-                timeout=600
-            )
-            
+            resp = None
+            for req_attempt in range(3):
+                try:
+                    resp = requests.post(
+                        n8n_url,
+                        json=req_data,
+                        headers={'Content-Type': 'application/json'},
+                        timeout=600
+                    )
+                    break
+                except requests.exceptions.RequestException as re:
+                    if req_attempt < 2:
+                        time.sleep(1.5)
+                    else:
+                        raise re
+
+            if resp is None:
+                error_response = json.dumps({
+                    "answer": "Could not reach the AI service. Make sure n8n is running on port 5678.",
+                    "guardrail": guard_info
+                })
+                return Response(error_response, status=503, headers={'Content-Type': 'application/json', **cors_headers})
+
             # If the production webhook is not active, try falling back to the test webhook
-            if resp.status_code == 404 and b"not registered" in resp.content:
+            if resp.status_code == 404 and resp.content and b"not registered" in resp.content:
                 test_url = n8n_url.replace('/webhook/', '/webhook-test/')
                 try:
                     test_resp = requests.post(
                         test_url,
-                        json=request.json,
+                        json=req_data,
                         headers={'Content-Type': 'application/json'},
                         timeout=600
                     )
-                    # If test webhook succeeded or returned a non-404, use its response
-                    if test_resp.status_code != 404:
+                    if test_resp is not None and test_resp.status_code != 404:
                         resp = test_resp
                 except Exception:
                     pass
 
-            # If n8n returns 404 (workflow inactive / not testing)
             if resp.status_code == 404:
-                import json
                 error_response = json.dumps({
                     "answer": "The AI Chat workflow is loaded in n8n, but it is currently inactive. "
                               "Please open n8n (http://localhost:5678), open the 'SamarthX AI Chat' workflow, "
-                              "and toggle the 'Active' switch in the top-right corner to ON."
+                              "and toggle the 'Active' switch in the top-right corner to ON.",
+                    "guardrail": guard_info
                 })
-                return Response(error_response, status=200, headers={'Content-Type': 'application/json'})
+                return Response(error_response, status=200, headers={'Content-Type': 'application/json', **cors_headers})
 
-            response = Response(
-                resp.content,
-                status=resp.status_code,
-                headers={'Content-Type': 'application/json'}
+            total_latency = round((time.time() - start_time) * 1000, 1)
+            
+            # Parse and enrich response
+            resp_content = resp.content.decode('utf-8', errors='ignore')
+            resp_json = {}
+            try:
+                resp_json = json.loads(resp_content)
+            except Exception:
+                resp_json = {"answer": resp_content}
+
+            resp_json["guardrail"] = guard_info
+            resp_json["total_latency_ms"] = total_latency
+
+            answer_text = resp_json.get("answer", "")
+            sql_text = resp_json.get("sql", "")
+
+            # Print rich Ollama & synthesis trace
+            print("-" * 70, flush=True)
+            print(f"[Ollama & AI Pipeline Trace]", flush=True)
+            print(f" • Question : {question}", flush=True)
+            print(f" • Guardrail: {guard_info.get('status')} ({guard_info.get('model')}, {guard_info.get('latency_ms')}ms)", flush=True)
+            if sql_text:
+                print(f" • SQL Query: {sql_text}", flush=True)
+            print(f" • Output   : {answer_text}", flush=True)
+            print(f" • Latency  : {total_latency}ms", flush=True)
+            print("=" * 70 + "\n", flush=True)
+
+            return Response(
+                json.dumps(resp_json),
+                status=200 if resp.status_code == 200 else resp.status_code,
+                headers={'Content-Type': 'application/json', **cors_headers}
             )
-            return response
         except Exception as e:
-            import json
-            error_response = json.dumps({"answer": f"Could not reach the AI service. Make sure n8n is running on port 5678. (Details: {str(e)})"})
-            return Response(error_response, status=502, headers={'Content-Type': 'application/json'})
+            total_latency = round((time.time() - start_time) * 1000, 1)
+            print(f"[AI Chatbot Error] {str(e)}", flush=True)
+            print("=" * 70 + "\n", flush=True)
+            error_response = json.dumps({
+                "answer": f"Could not reach the AI service. Make sure n8n is running on port 5678. (Details: {str(e)})",
+                "guardrail": guard_info
+            })
+            return Response(error_response, status=200, headers={'Content-Type': 'application/json', **cors_headers})
 
     csrf.exempt(ai_chat_proxy)
+
 

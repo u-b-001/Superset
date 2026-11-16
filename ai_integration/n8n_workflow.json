@@ -7,24 +7,32 @@
         "httpMethod": "POST",
         "path": "ai-chat",
         "responseMode": "responseNode",
-        "options": { "allowedOrigins": "*" }
+        "options": {
+          "allowedOrigins": "*"
+        }
       },
       "id": "webhook-node",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "ai-chat"
     },
     {
       "parameters": {
-        "jsCode": "const systemPrompt = `You are a PostgreSQL expert for the SamarthX education database (Goa state). Convert the user question into ONE valid PostgreSQL SELECT query.\n\nOUTPUT FORMAT (MANDATORY):\nLine 1: DATABASE: employee_db   (or)   DATABASE: org_db\nLine 2+: the raw SQL (no markdown, no code fences, no explanation)\n\nRULES:\n1. ONLY SELECT. NEVER INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE.\n2. Add LIMIT 1000 unless it is a COUNT/aggregate.\n3. Use schema-qualified names.\n4. For categorical TEXT comparisons use LOWER(TRIM(column)).\n5. Use COUNT(*) for counts.\n6. When asked to \"list\", \"name\", \"show\", or \"tell names of\" schools, select the \"school_name\" column. For employees/staff, select \"first_name\", \"middle_name\", and \"last_name\".\n7. Follow-up queries: If the user asks a follow-up to list or name items from the previous turn, use the exact same WHERE clauses/filters as the previous turn's query (e.g. if you filtered by 'individual' in the previous turn, continue filtering by 'individual').\n\n=== DATABASE employee_db ===\nTABLE goa.employees. Columns: id, employee_user_id, salutation, first_name, middle_name, last_name, gender, date_of_birth, main_stream, sub_appointment_type, employee_under, blood_group, marital_status, nationality, religion, social_category, join_under_which_category, disability_type, nature_of_appointment, is_active, date_of_joining_service, date_of_joining_present_school, is_single_onboarded, login_disabled, employee_type, created_at, updated_at, deleted_at\nVALUES: employee_type = 'TEACHING STAFF' | 'NON-TEACHING STAFF' | 'VOCATIONAL TEACHER' | 'ACADEMIC TEACHER'.\n- teacher/teaching -> employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER')\n- non-teaching -> employee_type = 'NON-TEACHING STAFF'\n- regular teacher (dashboard KPI card = 12,356) -> employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND nature_of_appointment IN ('Regular', '1-Regular')\n- non-regular teacher (dashboard KPI card = 5,332) -> employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND (nature_of_appointment ILIKE '%non%regular%' OR nature_of_appointment ILIKE '%contract%')\n- gender is messy: use LOWER(TRIM(gender)) = 'female' or 'male'\n- ALWAYS add: WHERE deleted_at IS NULL\n\n=== DATABASE org_db ===\nTABLE goa.schools. Columns: id, school_user_id, udise_code, school_name, school_type, school_type_gender, instruction_medium, affiliated_board_secondary, affiliated_board_higher, school_management_type, managing_trust_society_name, year_of_establishment, school_level, grades_offered, school_timing, employees_verified, students_verified, is_archived, status, admission_enabled, created_at, updated_at, deleted_at\nVALUES: school_management_type = 'State Govt','Society','Trust','Privately Managed','Central Govt', etc. school_type = 'Govt School','Aided School','Unaided School','Private School', etc.\n- ALWAYS add: WHERE deleted_at IS NULL AND is_archived = false\n\nROUTING: If the question is about schools, use org_db. If about employees/teachers/staff, use employee_db.\n\nEXAMPLES:\nQ: How many teachers are in Goa?\nDATABASE: employee_db\nSELECT COUNT(*) FROM goa.employees WHERE employee_type = 'TEACHING STAFF' AND deleted_at IS NULL;\n\nQ: How many schools are onboarded?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE deleted_at IS NULL AND is_archived = false;\n\nQ: How many government schools?\nDATABASE: org_db\nSELECT COUNT(*) FROM goa.schools WHERE LOWER(TRIM(school_management_type)) = 'state govt' AND deleted_at IS NULL AND is_archived = false;\n\nUser question follows.`;\n\nconst body = $input.first().json.body;\nconst question = body.question;\nconst history = body.history || [];\n\nlet historyText = '';\nif (history.length > 0) {\n  historyText = '=== CONVERSATION HISTORY ===\\n' + history.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\\n') + '\\n\\n';\n}\n\nreturn [{ json: { question: question, fullPrompt: systemPrompt + '\\n\\n' + historyText + 'User question: ' + question } }];"
+        "jsCode": "const systemPrompt = \"You are a PostgreSQL expert for the SamarthX education dashboard for Goa State.\\nConvert the user question into ONE valid PostgreSQL SELECT query.\\n\\nOUTPUT FORMAT (MANDATORY):\\nLine 1: DATABASE: employee_db   (or)   DATABASE: org_db\\nLine 2+: the raw SQL query (strictly no markdown, no code fences, no explanation)\\n\\nCRITICAL RULES:\\n1. ONLY SELECT queries. NEVER run INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, or CREATE.\\n2. Add LIMIT 1000 unless it is a COUNT/aggregate query.\\n3. Always schema-qualify tables: goa.employees, goa.employee_school_associations, goa.schools, public.teaching_staff.\\n4. For string matching use LOWER(TRIM(col)) or UPPER(TRIM(col)).\\n\\n================================================================================\\nDATABASE 1: employee_db (Teachers, Staff, Experience, Demographics, Designations)\\n================================================================================\\nBase Tables:\\n  goa.employees e\\n  LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id\\n  public.teaching_staff ts JOIN public.employees e ON e.employee_user_id = ts.employee_user_id (FOR DESIGNATIONS)\\n\\nCOMMON FILTERS FOR ALL DASHBOARD EMPLOYEE CHARTS (MANDATORY):\\n- Exclude test schools:\\n  esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL')\\n- Exclude invalid gender entries:\\n  e.gender NOT IN ('1-Male', '2-Female', 'ST', 'SC', 'General', 'OBC')\\n- Valid gender matching:\\n  * For male: AND TRIM(UPPER(e.gender)) = 'MALE'\\n  * For female: AND TRIM(UPPER(e.gender)) = 'FEMALE'\\n  * For transgender: AND TRIM(UPPER(e.gender)) = 'TRANSGENDER'\\n- Active employees filter:\\n  e.deleted_at IS NULL\\n\\nCANONICAL DASHBOARD CHART QUERIES:\\n\\n1. REGULAR TEACHERS (Dashboard KPI Card = 11,930):\\n   SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE e.nature_of_appointment IN ('Regular', '1-Regular') AND e.employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL');\\n   * Male regular teachers = 2,304: add AND TRIM(UPPER(e.gender)) = 'MALE'\\n   * Female regular teachers = 9,615: add AND TRIM(UPPER(e.gender)) = 'FEMALE'\\n\\n2. NON-REGULAR / CONTRACT TEACHERS (Dashboard KPI Card = 4,208):\\n   SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE e.nature_of_appointment IN ('Non - Regular', 'Non-Regular', 'NON - REGULAR', '2-Contract', 'Contract') AND e.employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL');\\n   * Male non-regular teachers = 614: add AND TRIM(UPPER(e.gender)) = 'MALE'\\n   * Female non-regular teachers = 3,591: add AND TRIM(UPPER(e.gender)) = 'FEMALE'\\n\\n3. TOTAL WORKFORCE / EMPLOYEES (Dashboard KPI Card = 21,144):\\n   SELECT COUNT(DISTINCT id) FROM goa.employees WHERE deleted_at IS NULL;\\n\\n4. TEACHING & NON-TEACHING STAFF (Dashboard Slice 22):\\n   - Teaching Staff (= 16,139):\\n     SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE esa.associated_school NOT IN ('SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL', 'DHE - TEST', 'DHE SCHOOL FOR TESTING') AND e.employee_type IN ('VOCATIONAL TEACHER', 'TEACHING STAFF');\\n   - Non-Teaching Staff (= 4,533):\\n     SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE esa.associated_school NOT IN ('SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL', 'DHE - TEST', 'DHE SCHOOL FOR TESTING') AND e.employee_type = 'NON-TEACHING STAFF';\\n\\n5. GENDER DEMOGRAPHICS (Dashboard Slice 6):\\n   - Female Staff / Teachers (= 15,472):\\n     SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL') AND TRIM(UPPER(e.gender)) = 'FEMALE';\\n   - Male Staff / Teachers (= 5,214):\\n     SELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL') AND TRIM(UPPER(e.gender)) = 'MALE';\\n\\n6. SOCIAL CATEGORY DISTRIBUTION (Dashboard Slice 11):\\n   SELECT UPPER(TRIM(e.social_category)), COUNT(*) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL') GROUP BY 1 ORDER BY 2 DESC;\\n   - General = 16,340\\n   - OBC = 3,357\\n   - ST = 1,803\\n   - SC = 250\\n\\n7. TEACHING EXPERIENCE BY GENDER (Dashboard Slice 20):\\n   Base structure:\\n   SELECT COUNT(*) FROM (\\n     SELECT e.*, esa.associated_school\\n     FROM goa.employees e\\n     LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id\\n   ) sub\\n   WHERE gender NOT IN ('1-Male', '2-Female', 'ST', 'SC', 'General', 'OBC')\\n     AND employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER')\\n     AND associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL')\\n     [AND TRIM(UPPER(gender)) = 'MALE' | 'FEMALE']\\n     [AND experience_bucket condition]\\n\\n   Exact Experience Buckets & Figures:\\n   - 0-5 Years (Chart = 5,192 / 5.19k):\\n     AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 0 AND 5\\n     * Male = 870, Female = 4,320 (4.32k)\\n   - 6-10 Years (Chart = 2,411 / 2.41k):\\n     AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 6 AND 10\\n     * Male = 431, Female = 1,974 (1.97k)\\n   - 11-20 Years (Chart = 5,508 / 5.51k):\\n     AND EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 11 AND 20\\n     * Male = 908, Female = 4,595 (4.60k)\\n   - 20+ Years / More than 20 Years (Chart = 3,980 / 3.98k / exact 3,975):\\n     AND (CASE\\n           WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 0 AND 5 THEN 'A. 0-5 Years'\\n           WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 6 AND 10 THEN 'B. 6-10 Years'\\n           WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 11 AND 20 THEN 'C. 11-20 Years'\\n           ELSE 'D. 20+ Years'\\n          END = 'D. 20+ Years')\\n     * Total = 3,980 (3.98k on chart)\\n     * Male = 929\\n     * Female = 3,046 (3.05k on chart)\\n\\n8. NON-TEACHING EXPERIENCE BY GENDER (Dashboard Slice 21):\\n   Same as Slice 20, but with employee_type = 'NON-TEACHING STAFF':\\n   - 0-5 Years: Total = 1,573 (Male: 764, Female: 809)\\n   - 6-10 Years: Total = 734 (Male: 371, Female: 363)\\n   - 11-20 Years: Total = 1,192 (Male: 574, Female: 616)\\n   - 20+ Years: Total = 1,185 (Male: 646, Female: 536)\\n\\n9. TEACHER'S DESIGNATION (Dashboard Slice 26):\\n   Table: public.teaching_staff ts JOIN public.employees e ON e.employee_user_id = ts.employee_user_id\\n   Filter: WHERE UPPER(e.associated_school) NOT LIKE '%TEST%'\\n   Query Pattern:\\n   SELECT COUNT(DISTINCT ts.employee_user_id) FROM public.teaching_staff ts JOIN public.employees e ON e.employee_user_id = ts.employee_user_id WHERE UPPER(ts.employee_designation) = '<DESIGNATION>' AND UPPER(e.associated_school) NOT LIKE '%TEST%';\\n   - HEAD OF INSTITUTION = 403\\n   - TEACHER = 12,155 (12.2k)\\n   - CONTRACT BASIS VOCATIONAL TEACHER = 221\\n   - ACTING HEAD TEACHER (AIDED/UNAIDED) = 185\\n   - LECTURER = 149\\n   - FULL TIME VOCATIONAL TEACHER = 139\\n\\n================================================================================\\nDATABASE 2: org_db (Schools, School Types, Management, Education Levels)\\n================================================================================\\nTable: goa.schools\\nCOMMON FILTER: ALWAYS add: WHERE is_archived = false AND deleted_at IS NULL\\n\\nCOLUMNS IN goa.schools:\\n1. school_management_type:\\n   - 'State Govt' (= 790)\\n   - 'Society' (= 501)\\n   - 'Trust' (= 77)\\n   - 'Privately Managed' (= 64)\\n   - 'Religious Organisations' (= 25)\\n   - 'Local Bodies' (= 14)\\n   - 'Central Govt' (= 11)\\n   - 'Individual' (= 10)\\n\\n2. school_type:\\n   - 'Govt School' (= 772)\\n   - 'Aided School' (= 541)\\n   - 'Unaided School' (= 99)\\n   - 'Private School' (= 50)\\n   - 'Special Needs School' (= 16)\\n   - 'International School' (= 8)\\n   - 'ICSE School' (= 5)\\n   - 'Central Govt School' (= 5)\\n   - 'CBSE School' (= 5)\\n\\n3. school_level (Education Level):\\n   - 'Primary' (= 854)\\n   - 'Secondary' (= 447)\\n   - 'Higher Secondary' (= 145)\\n   - 'Middle' (= 26)\\n   - 'Pre-Primary' (= 16) / 'Pre Primary Only' (= 1)\\n   - 'Upper Primary' (= 12)\\n\\nCRITICAL RULE FOR SCHOOL LEVEL VS SCHOOL TYPE:\\n- 'Secondary', 'Primary', 'Higher Secondary', 'Middle', 'Pre-Primary', 'Upper Primary' belong to `school_level`.\\n- Even if the user asks \\\"schools of type secondary\\\", \\\"secondary type\\\", or \\\"secondary schools\\\", query `school_level = 'Secondary'`, NOT `school_type = 'Secondary'`!\\n\\nCANONICAL QUERIES FOR SCHOOL CHARTS:\\n\\n1. TOTAL SCHOOLS ONBOARDED (Dashboard Slice 23 KPI Card = 1,501):\\n   SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL;\\n\\n2. SCHOOL MANAGEMENT TYPE BY EDUCATION LEVEL (Dashboard Slice 17):\\n   - Religious Organisations Secondary Schools (= 12):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'RELIGIOUS ORGANISATIONS' AND UPPER(school_level) = 'SECONDARY';\\n   - Religious Organisations Primary Schools (= 7):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'RELIGIOUS ORGANISATIONS' AND UPPER(school_level) = 'PRIMARY';\\n   - Trust Managed Secondary Schools (= 26):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST' AND UPPER(school_level) = 'SECONDARY';\\n   - Trust Managed Primary Schools (= 29):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST' AND UPPER(school_level) = 'PRIMARY';\\n   - Trust Managed Higher Secondary Schools (= 16):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST' AND UPPER(school_level) = 'HIGHER SECONDARY';\\n   - Society Managed Secondary Schools (= 278):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'SOCIETY' AND UPPER(school_level) = 'SECONDARY';\\n   - Society Managed Primary Schools (= 132):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'SOCIETY' AND UPPER(school_level) = 'PRIMARY';\\n   - Privately Managed Secondary Schools (= 16):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'PRIVATELY MANAGED' AND UPPER(school_level) = 'SECONDARY';\\n   - Local Bodies Secondary Schools (= 5):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'LOCAL BODIES' AND UPPER(school_level) = 'SECONDARY';\\n   - State Govt Secondary Schools (= 105):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'STATE GOVT' AND UPPER(school_level) = 'SECONDARY';\\n\\n3. SCHOOL TYPE WITH LEVEL (Dashboard Slice 16):\\n   - Govt Secondary Schools (= 90):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_type) = 'GOVT SCHOOL' AND UPPER(school_level) = 'SECONDARY';\\n   - Aided Secondary Schools (= 328):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_type) = 'AIDED SCHOOL' AND UPPER(school_level) = 'SECONDARY';\\n   - Unaided Secondary Schools (= 17):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_type) = 'UNAIDED SCHOOL' AND UPPER(school_level) = 'SECONDARY';\\n\\n4. OVERALL SCHOOLS BY EDUCATION LEVEL:\\n   - Total Secondary Schools (= 447):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_level) = 'SECONDARY';\\n   - Total Primary Schools (= 854):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_level) = 'PRIMARY';\\n   - Total Higher Secondary Schools (= 145):\\n     SELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_level) = 'HIGHER SECONDARY';\\n\\n5. SCHOOLS BY MANAGEMENT (Dashboard Slice 29, Total = 1,501):\\n   SELECT school_management_type, COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC;\\n   - State Govt = 790\\n   - Society = 501\\n   - Trust = 77\\n   - Privately Managed = 64\\n   - Religious Organisations = 25\\n   - Local Bodies = 14\\n   - Central Govt = 11\\n   - Individual = 10\\n\\n6. SCHOOLS BY TYPE (Dashboard Slice 28, Total = 1,501):\\n   SELECT school_type, COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL GROUP BY 1 ORDER BY 2 DESC;\\n   - Govt School = 772\\n   - Aided School = 541\\n   - Unaided School = 99\\n   - Private School = 50\\n\\nROUTING RULE:\\n- If the question asks about schools, institutions, boards, or school management, output \\\"DATABASE: org_db\\\".\\n- If the question asks about teachers, staff, employees, experience, gender, designations, or social categories, output \\\"DATABASE: employee_db\\\".\\n\\nFEW-SHOT EXAMPLES:\\nQ: How many secondary schools are there which are managed by religious organisations?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'RELIGIOUS ORGANISATIONS' AND UPPER(school_level) = 'SECONDARY';\\n\\nQ: How many schools are managed by religious organisations?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'RELIGIOUS ORGANISATIONS';\\n\\nQ: How many trust managed schools are there of type secondary?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST' AND UPPER(school_level) = 'SECONDARY';\\n\\nQ: How many trust managed secondary schools are there?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST' AND UPPER(school_level) = 'SECONDARY';\\n\\nQ: What is the count of trust managed schools?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_management_type) = 'TRUST';\\n\\nQ: How many secondary schools are there?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND UPPER(school_level) = 'SECONDARY';\\n\\nQ: What is the count of head of institutions?\\nDATABASE: employee_db\\nSELECT COUNT(DISTINCT ts.employee_user_id) FROM public.teaching_staff ts JOIN public.employees e ON e.employee_user_id = ts.employee_user_id WHERE UPPER(ts.employee_designation) = 'HEAD OF INSTITUTION' AND UPPER(e.associated_school) NOT LIKE '%TEST%';\\n\\nQ: How many employees are there who are head of institutions?\\nDATABASE: employee_db\\nSELECT COUNT(DISTINCT ts.employee_user_id) FROM public.teaching_staff ts JOIN public.employees e ON e.employee_user_id = ts.employee_user_id WHERE UPPER(ts.employee_designation) = 'HEAD OF INSTITUTION' AND UPPER(e.associated_school) NOT LIKE '%TEST%';\\n\\nQ: How many male teachers have more than 20 years of experience?\\nDATABASE: employee_db\\nSELECT COUNT(*) FROM (SELECT e.*, esa.associated_school FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id) sub WHERE gender NOT IN ('1-Male', '2-Female', 'ST', 'SC', 'General', 'OBC') AND employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL') AND TRIM(UPPER(gender)) = 'MALE' AND (CASE WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 0 AND 5 THEN 'A. 0-5 Years' WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 6 AND 10 THEN 'B. 6-10 Years' WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 11 AND 20 THEN 'C. 11-20 Years' ELSE 'D. 20+ Years' END = 'D. 20+ Years');\\n\\nQ: How many female teachers have more than 20 years of experience?\\nDATABASE: employee_db\\nSELECT COUNT(*) FROM (SELECT e.*, esa.associated_school FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id) sub WHERE gender NOT IN ('1-Male', '2-Female', 'ST', 'SC', 'General', 'OBC') AND employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL') AND TRIM(UPPER(gender)) = 'FEMALE' AND (CASE WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 0 AND 5 THEN 'A. 0-5 Years' WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 6 AND 10 THEN 'B. 6-10 Years' WHEN EXTRACT(YEAR FROM AGE(CURRENT_DATE, date_of_joining_service)) BETWEEN 11 AND 20 THEN 'C. 11-20 Years' ELSE 'D. 20+ Years' END = 'D. 20+ Years');\\n\\nQ: How many regular teachers are there?\\nDATABASE: employee_db\\nSELECT COUNT(DISTINCT e.id) FROM goa.employees e LEFT JOIN goa.employee_school_associations esa ON e.id = esa.employee_id WHERE e.nature_of_appointment IN ('Regular', '1-Regular') AND e.employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER') AND esa.associated_school NOT IN ('DHE - TEST', 'PRADNYA DHE TEST SCHOOL', 'SIYA TEST SCHOOL', 'SAMARTHX TEST SCHOOL');\\n\\nQ: How many government schools are there?\\nDATABASE: org_db\\nSELECT COUNT(*) FROM goa.schools WHERE is_archived = false AND deleted_at IS NULL AND school_type = 'Govt School';\\n\\nUser question follows.\";\n\nconst body = $input.first().json.body;\nconst rawQuestion = body.question || '';\n// Clean common typos e.g. \"how man\" -> \"how many\", \"managd\" -> \"managed\"\nconst question = rawQuestion\n  .replace(/\\bhow\\s+man\\b/gi, 'how many')\n  .replace(/\\bmanagd\\b/gi, 'managed');\nconst history = body.history || [];\n\nlet historyText = '';\nif (history.length > 0) {\n  historyText = '=== CONVERSATION HISTORY ===\\n' + history.map(msg => `${msg.role.toUpperCase()}: ${msg.content}`).join('\\n') + '\\n\\n';\n}\n\nreturn [{ json: { question: question, fullPrompt: systemPrompt + '\\n\\n' + historyText + 'User question: ' + question } }];"
       },
       "id": "build-prompt",
       "name": "Build Prompt",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -55,7 +63,10 @@
       "name": "Groq Generate SQL",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [640, 300],
+      "position": [
+        640,
+        300
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "delayBetweenTries": 1000
@@ -68,18 +79,27 @@
       "name": "Validate and Route",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [840, 300]
+      "position": [
+        840,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": true, "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "cond1",
               "leftValue": "={{ $json.db }}",
               "rightValue": "org_db",
-              "operator": { "type": "string", "operation": "equals" }
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -90,7 +110,10 @@
       "name": "Is School Query",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1040, 300]
+      "position": [
+        1040,
+        300
+      ]
     },
     {
       "parameters": {
@@ -102,9 +125,15 @@
       "name": "Query Org DB",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1260, 200],
+      "position": [
+        1260,
+        200
+      ],
       "credentials": {
-        "postgres": { "id": "samarthx-org-db", "name": "SamarthX Org DB" }
+        "postgres": {
+          "id": "samarthx-org-db",
+          "name": "SamarthX Org DB"
+        }
       }
     },
     {
@@ -117,9 +146,15 @@
       "name": "Query Employee DB",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
-      "position": [1260, 400],
+      "position": [
+        1260,
+        400
+      ],
       "credentials": {
-        "postgres": { "id": "samarthx-data-db", "name": "SamarthX Data DB" }
+        "postgres": {
+          "id": "samarthx-data-db",
+          "name": "SamarthX Data DB"
+        }
       }
     },
     {
@@ -151,7 +186,10 @@
       "name": "Groq Format Answer",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1480, 300],
+      "position": [
+        1480,
+        300
+      ],
       "retryOnFail": true,
       "maxTries": 3,
       "delayBetweenTries": 1000
@@ -165,19 +203,111 @@
       "name": "Respond",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1700, 300]
+      "position": [
+        1700,
+        300
+      ]
     }
   ],
   "connections": {
-    "Webhook": { "main": [[{ "node": "Build Prompt", "type": "main", "index": 0 }]] },
-    "Build Prompt": { "main": [[{ "node": "Groq Generate SQL", "type": "main", "index": 0 }]] },
-    "Groq Generate SQL": { "main": [[{ "node": "Validate and Route", "type": "main", "index": 0 }]] },
-    "Validate and Route": { "main": [[{ "node": "Is School Query", "type": "main", "index": 0 }]] },
-    "Is School Query": { "main": [[{ "node": "Query Org DB", "type": "main", "index": 0 }], [{ "node": "Query Employee DB", "type": "main", "index": 0 }]] },
-    "Query Org DB": { "main": [[{ "node": "Groq Format Answer", "type": "main", "index": 0 }]] },
-    "Query Employee DB": { "main": [[{ "node": "Groq Format Answer", "type": "main", "index": 0 }]] },
-    "Groq Format Answer": { "main": [[{ "node": "Respond", "type": "main", "index": 0 }]] }
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Groq Generate SQL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Generate SQL": {
+      "main": [
+        [
+          {
+            "node": "Validate and Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Route": {
+      "main": [
+        [
+          {
+            "node": "Is School Query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is School Query": {
+      "main": [
+        [
+          {
+            "node": "Query Org DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Query Employee DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Org DB": {
+      "main": [
+        [
+          {
+            "node": "Groq Format Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Employee DB": {
+      "main": [
+        [
+          {
+            "node": "Groq Format Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Format Answer": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "active": true
 }

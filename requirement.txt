@@ -25,3 +25,6 @@ Pillow==11.3.0
 
 # JSON handling (used by Superset internally)
 simplejson==3.20.2
+
+# Real-time WebSocket server for Live AI Chatbot & Dashboard Stats
+websockets==16.1.1

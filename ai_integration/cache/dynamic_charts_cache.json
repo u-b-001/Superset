@@ -1,0 +1,496 @@
+{
+  "version": 1.0,
+  "dashboards": {
+    "1": {
+      "id": 1,
+      "title": "Employees on SamarthX : Goa State",
+      "slug": null,
+      "charts": [
+        4,
+        5,
+        6,
+        11,
+        18,
+        20,
+        21,
+        22,
+        25,
+        26
+      ]
+    },
+    "2": {
+      "id": 2,
+      "title": "SamarthX School Onboarding: Goa",
+      "slug": null,
+      "charts": [
+        16,
+        17,
+        23,
+        27,
+        28,
+        29
+      ]
+    }
+  },
+  "charts_by_slice_id": {
+    "4": {
+      "slice_id": 4,
+      "slice_name": "Regular Teacher",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "big_number_total",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "5": {
+      "slice_id": 5,
+      "slice_name": "Non-Regular Teacher",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "big_number_total",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "6": {
+      "slice_id": 6,
+      "slice_name": "Gender Distribution",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "pie",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "11": {
+      "slice_id": 11,
+      "slice_name": "Social Category Distribution",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "pie",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "18": {
+      "slice_id": 18,
+      "slice_name": "Total Employees",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "big_number",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "20": {
+      "slice_id": 20,
+      "slice_name": "Teaching Experience by Gender",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "echarts_timeseries_bar",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "21": {
+      "slice_id": 21,
+      "slice_name": "Non-Teaching Experience by Gender",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "echarts_timeseries_bar",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "22": {
+      "slice_id": 22,
+      "slice_name": "Teaching & Non Teaching Staff",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "pie",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "25": {
+      "slice_id": 25,
+      "slice_name": "Associated School Staff Count",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "table",
+      "table": "goa.employees",
+      "db_id": 1
+    },
+    "26": {
+      "slice_id": 26,
+      "slice_name": "Teacher's Designation",
+      "dashboard_id": 1,
+      "dashboard_title": "Employees on SamarthX : Goa State",
+      "viz_type": "table",
+      "table": "public.Teaching_staff_designation",
+      "db_id": 1
+    },
+    "16": {
+      "slice_id": 16,
+      "slice_name": "School Type with Level",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "echarts_timeseries_bar",
+      "table": "goa.schools",
+      "db_id": 2
+    },
+    "17": {
+      "slice_id": 17,
+      "slice_name": "School Management Type by Education Level",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "echarts_timeseries_bar",
+      "table": "goa.schools",
+      "db_id": 2
+    },
+    "23": {
+      "slice_id": 23,
+      "slice_name": "Total Schools Onboarded",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "big_number_total",
+      "table": "goa.schools",
+      "db_id": 2
+    },
+    "27": {
+      "slice_id": 27,
+      "slice_name": "School Onboarding timeline",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "echarts_timeseries_line",
+      "table": "goa.schools",
+      "db_id": 2
+    },
+    "28": {
+      "slice_id": 28,
+      "slice_name": "Type of Schools",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "pie",
+      "table": "goa.schools",
+      "db_id": 2
+    },
+    "29": {
+      "slice_id": 29,
+      "slice_name": "Schools Management Type",
+      "dashboard_id": 2,
+      "dashboard_title": "SamarthX School Onboarding: Goa",
+      "viz_type": "pie",
+      "table": "goa.schools",
+      "db_id": 2
+    }
+  },
+  "dimension_vocabularies": {
+    "management_types": {
+      "religious": {
+        "canonical": "Religious Organisations",
+        "total": 25,
+        "levels": {
+          "total": 25,
+          "higher_secondary": 4,
+          "middle": 1,
+          "pre_primary": 1,
+          "primary": 7,
+          "secondary": 12
+        }
+      },
+      "trust": {
+        "canonical": "Trust",
+        "total": 77,
+        "levels": {
+          "total": 77,
+          "higher_secondary": 16,
+          "middle": 2,
+          "pre_primary": 4,
+          "primary": 29,
+          "secondary": 26
+        }
+      },
+      "society": {
+        "canonical": "Society",
+        "total": 501,
+        "levels": {
+          "total": 501,
+          "higher_secondary": 84,
+          "middle": 4,
+          "pre_primary": 2,
+          "primary": 132,
+          "secondary": 278,
+          "upper_primary": 1
+        }
+      },
+      "state_govt": {
+        "canonical": "State Govt",
+        "total": 790,
+        "levels": {
+          "total": 790,
+          "higher_secondary": 20,
+          "middle": 17,
+          "pre_primary": 3,
+          "primary": 635,
+          "secondary": 105,
+          "upper_primary": 10
+        }
+      },
+      "privately_managed": {
+        "canonical": "Privately Managed",
+        "total": 64,
+        "levels": {
+          "total": 64,
+          "higher_secondary": 14,
+          "middle": 1,
+          "pre_primary_only": 1,
+          "primary": 32,
+          "secondary": 16
+        }
+      },
+      "local_bodies": {
+        "canonical": "Local Bodies",
+        "total": 14,
+        "levels": {
+          "total": 14,
+          "higher_secondary": 3,
+          "primary": 5,
+          "secondary": 5,
+          "upper_primary": 1
+        }
+      },
+      "central_govt": {
+        "canonical": "Central Govt",
+        "total": 11,
+        "levels": {
+          "total": 11,
+          "higher_secondary": 2,
+          "middle": 1,
+          "pre_primary": 1,
+          "primary": 6,
+          "secondary": 1
+        }
+      },
+      "individual": {
+        "canonical": "Individual",
+        "total": 10,
+        "levels": {
+          "total": 10,
+          "higher_secondary": 2,
+          "pre_primary": 5,
+          "primary": 3
+        }
+      }
+    },
+    "school_types": {
+      "govt": {
+        "canonical": "Govt School",
+        "total": 772,
+        "levels": {
+          "total": 772,
+          "higher_secondary": 11,
+          "middle": 17,
+          "pre_primary": 3,
+          "primary": 640,
+          "secondary": 90,
+          "upper_primary": 11
+        }
+      },
+      "aided": {
+        "canonical": "Aided School",
+        "total": 541,
+        "levels": {
+          "total": 541,
+          "higher_secondary": 99,
+          "middle": 1,
+          "primary": 113,
+          "secondary": 328
+        }
+      },
+      "unaided": {
+        "canonical": "Unaided School",
+        "total": 99,
+        "levels": {
+          "total": 99,
+          "higher_secondary": 10,
+          "middle": 2,
+          "pre_primary": 3,
+          "pre_primary_only": 1,
+          "primary": 66,
+          "secondary": 17
+        }
+      },
+      "private": {
+        "canonical": "Private School",
+        "total": 50,
+        "levels": {
+          "total": 50,
+          "higher_secondary": 11,
+          "middle": 1,
+          "pre_primary": 7,
+          "primary": 25,
+          "secondary": 6
+        }
+      },
+      "special_needs": {
+        "canonical": "Special Needs School",
+        "total": 16,
+        "levels": {
+          "total": 16,
+          "higher_secondary": 1,
+          "middle": 3,
+          "pre_primary": 1,
+          "primary": 7,
+          "secondary": 3,
+          "upper_primary": 1
+        }
+      },
+      "international": {
+        "canonical": "International School",
+        "total": 8,
+        "levels": {
+          "total": 8,
+          "higher_secondary": 6,
+          "middle": 1,
+          "pre_primary": 1
+        }
+      },
+      "cbse": {
+        "canonical": "CBSE School",
+        "total": 5,
+        "levels": {
+          "total": 5,
+          "higher_secondary": 3,
+          "secondary": 2
+        }
+      },
+      "icse": {
+        "canonical": "ICSE School",
+        "total": 5,
+        "levels": {
+          "total": 5,
+          "higher_secondary": 3,
+          "primary": 2
+        }
+      }
+    },
+    "education_levels": {
+      "higher_secondary": 145,
+      "middle": 26,
+      "pre_primary": 16,
+      "primary": 854,
+      "secondary": 447,
+      "upper_primary": 12,
+      "pre_primary_only": 1
+    },
+    "teacher_designations": {
+      "TEACHER": 12156,
+      "HEAD OF INSTITUTION": 403,
+      "CONTRACT BASIS VOCATIONAL TEACHER": 221,
+      "ACTING HEAD TEACHER (AIDED/UNAIDED)": 185,
+      "LECTURER": 149,
+      "FULL TIME VOCATIONAL TEACHER": 139,
+      "LECTURE BASIS VOCATIONAL TEACHER": 27,
+      "INSTRUCTOR POSITIONED AS PER RTE": 25,
+      "NOT APPLICABLE": 8,
+      "PRIMARY TEACHER": 4,
+      "NA": 2,
+      "UNDERGRADUATE TEACHER": 1,
+      "ASSISTANT TEACHER": 1,
+      "ACTING HEAD TEACHER": 1,
+      "ASST. HEAD OF THE INSTITUTION": 1,
+      "VICE PRINCIPAL INCHARGE": 1,
+      "DRAWING TEACHER": 1,
+      "TEACHER IN SPECIAL EDUCATION \n(ACADEMIC RESOURCE ROOM)": 1
+    },
+    "social_categories": {
+      "OTHER": 36,
+      "1-GENERAL": 2,
+      "NINJA": 8,
+      "SUTAR": 1,
+      "": 4,
+      "PD": 2,
+      "KSHATRIYA": 1,
+      "3-ST": 1,
+      "ST": 1804,
+      "SUDRAS": 1,
+      "NT-C": 1,
+      "KASHMIRI PANDIT": 3,
+      "OBC": 3359,
+      "NO": 1,
+      "MINORITY": 3,
+      "R C": 1,
+      "UL": 1,
+      "GENERAL": 16351,
+      "SC": 253,
+      "RAP GOD": 5,
+      "EWS": 3
+    },
+    "gender_distribution": {
+      "TRANSGENDER": 19,
+      "FEMALE": 16288,
+      "MALE": 5534
+    },
+    "teaching_experience_by_gender": {
+      "A. 0-5 Years": {
+        "total": 5203,
+        "female": 4323,
+        "male": 877,
+        "transgender": 3
+      },
+      "B. 6-10 Years": {
+        "total": 2411,
+        "female": 1972,
+        "male": 433,
+        "transgender": 6
+      },
+      "C. 11-20 Years": {
+        "total": 5519,
+        "female": 4602,
+        "male": 912,
+        "transgender": 5
+      },
+      "D. 20+ Years": {
+        "total": 3971,
+        "female": 3046,
+        "male": 925
+      }
+    },
+    "non_teaching_experience_by_gender": {
+      "A. 0-5 Years": {
+        "total": 1574,
+        "female": 810,
+        "male": 764
+      },
+      "B. 6-10 Years": {
+        "total": 735,
+        "female": 363,
+        "male": 372
+      },
+      "C. 11-20 Years": {
+        "total": 1199,
+        "female": 619,
+        "male": 578,
+        "transgender": 2
+      },
+      "D. 20+ Years": {
+        "total": 1177,
+        "female": 533,
+        "male": 641,
+        "transgender": 3
+      }
+    },
+    "regular_teachers_gender": {
+      "male": 2307,
+      "female": 9616,
+      "transgender": 11
+    },
+    "non_regular_teachers_gender": {
+      "male": 614,
+      "female": 3591,
+      "transgender": 3
+    }
+  },
+  "kpi_totals": {
+    "total_employees": 21150,
+    "total_schools": 1501,
+    "regular_teachers": 11934,
+    "non_regular_teachers": 4208,
+    "teaching_staff": 17103,
+    "non_teaching_staff": 4684
+  }
+}

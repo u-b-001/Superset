@@ -1,0 +1,10 @@
+python-interpreter-path = "venv_310/Scripts/python.exe"
+site-packages-path = [
+    "venv_310/Lib/site-packages",
+    ".",
+    "ai_integration"
+]
+
+[errors]
+missing-source-for-stubs = "ignore"
+

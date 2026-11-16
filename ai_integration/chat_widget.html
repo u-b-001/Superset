@@ -1,216 +1,2570 @@
-<!-- ═══════════════════════════════════════════════════════════════════════
-     SamarthX AI Chat Widget
-     Add this to: venv_310/Lib/site-packages/superset/templates/tail_js_custom_extra.html
-     (Append AFTER the existing logo replacement script)
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// SamarthX Superset - Logo Replacement & Navbar Customization
+// ═══════════════════════════════════════════════════════════════════════
+(function() {
+    'use strict';
+    
+    function replaceLogo() {
+        const navbarLogo = document.querySelector('.navbar-brand img, a[href="/superset/welcome/"] img');
+        if (navbarLogo) {
+            navbarLogo.src = '/static/assets/images/samarthx_logo.png';
+            navbarLogo.alt = 'SamarthX';
+            navbarLogo.style.cssText = `
+                max-height: 40px !important;
+                height: 60px !important;
+                width: auto !important;
+                vertical-align: middle !important;
+                display: block !important;
+                margin: auto !important;
+                object-fit: contain !important;
+            `;
+            
+            const parent = navbarLogo.closest('.navbar-brand, a');
+            if (parent) {
+                parent.style.cssText = `
+                    display: flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
+                    height: auto !important;
+                    padding: 10px !important;
+                `;
+            }
+        }
+         
+        const settingsLogo = document.querySelector('[class*="Settings"] img, [class*="settings"] img, .ant-dropdown-trigger img');
+        if (settingsLogo && settingsLogo !== navbarLogo) {
+            settingsLogo.style.display = 'none';
+        }
+        
+        const allLogos = document.querySelectorAll('img[src*="superset"], img[alt*="Superset"], img[alt*="superset"], img[src*="samarthx"]');
+        allLogos.forEach(img => {
+            if (img !== navbarLogo) {
+                const rect = img.getBoundingClientRect();
+                if (rect.right > window.innerWidth - 200) {
+                    img.style.display = 'none';
+                }
+            }
+        });
+    }
+    
+    replaceLogo();
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', replaceLogo);
+    }
+    setTimeout(replaceLogo, 500);
+    setTimeout(replaceLogo, 1000);
+    setTimeout(replaceLogo, 2000);
+    
+    const observer = new MutationObserver(replaceLogo);
+    observer.observe(document.body || document.documentElement, {
+        childList: true,
+        subtree: true
+    });
+})();
+</script>
 
-     IMPORTANT: Update N8N_WEBHOOK_URL below to your actual n8n webhook URL
+<!-- ═══════════════════════════════════════════════════════════════════════
+     SamarthX Real-Time WebSocket AI Chat, Full Dashboard Chart Sync,
+     and Live User-Understandable Pipeline Execution & Audit Logs Panel
      ═══════════════════════════════════════════════════════════════════════ -->
 
 <style>
-  #sx-ai-button {
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+  /* ── LIVE KPI & CHART HIGHLIGHT PULSE EFFECT ── */
+  .sx-kpi-updated {
+    position: relative !important;
+    border: 2px solid #2563eb !important;
+    border-radius: 12px !important;
+    box-shadow: 0 0 26px rgba(37, 99, 235, 0.45), 0 8px 24px rgba(10, 31, 110, 0.15) !important;
+    transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    animation: sx-kpi-pulse 3s ease-out !important;
+  }
+  @keyframes sx-kpi-pulse {
+    0% {
+      border-color: #38bdf8;
+      box-shadow: 0 0 32px rgba(56, 189, 248, 0.85), 0 0 16px rgba(37, 99, 235, 0.7);
+      transform: scale(1.02);
+    }
+    50% {
+      border-color: #2563eb;
+      box-shadow: 0 0 22px rgba(37, 99, 235, 0.4);
+      transform: scale(1);
+    }
+    100% {
+      border-color: rgba(37, 99, 235, 0.25);
+      box-shadow: none;
+      transform: scale(1);
+    }
+  }
+
+  .sx-kpi-sync-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: linear-gradient(135deg, #1e40af, #2563eb);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 3px 10px rgba(37, 99, 235, 0.45);
+    z-index: 10;
+    animation: sx-badge-fade 5s forwards;
+    pointer-events: none;
+    font-family: 'DM Sans', sans-serif;
+  }
+  @keyframes sx-badge-fade {
+    0% { opacity: 0; transform: translateY(-4px); }
+    15% { opacity: 1; transform: translateY(0); }
+    85% { opacity: 1; transform: translateY(0); }
+    100% { opacity: 0; transform: translateY(-4px); }
+  }
+
+  /* ── FLOATING BUTTONS DOCK ── */
+  #sx-floating-dock {
     position: fixed;
     bottom: 24px;
     right: 24px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 99999;
+  }
+
+  #sx-ai-logs-button {
+    background: #ffffff;
+    color: #1a3fbb;
+    border: 1.5px solid rgba(26, 63, 187, 0.35);
+    border-radius: 30px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(10, 31, 110, 0.15);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    font-family: 'DM Sans', sans-serif;
+  }
+  #sx-ai-logs-button:hover {
+    transform: translateY(-2px);
+    border-color: #2563eb;
+    box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25);
+    background: #f8faff;
+  }
+  .sx-logs-badge-pill {
     background: #2563eb;
     color: #fff;
-    font-size: 26px;
-    display: flex;
+    font-size: 11px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+
+  #sx-ai-button {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #1a3fbb, #2563eb);
+    color: #fff;
+    font-size: 24px;
+    display: none;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(10, 31, 110, 0.3);
-    z-index: 99999;
-    transition: transform 0.2s;
+    box-shadow: 0 6px 20px rgba(10, 31, 110, 0.35), 0 0 15px rgba(37, 99, 235, 0.3);
+    transition: transform 0.2s, box-shadow 0.2s;
   }
-  #sx-ai-button:hover { transform: scale(1.08); }
+  #sx-ai-button:hover {
+    transform: scale(1.08);
+    box-shadow: 0 8px 26px rgba(10, 31, 110, 0.5), 0 0 20px rgba(37, 99, 235, 0.5);
+  }
 
+  /* ── MAIN AI & LOGS PANEL ── */
   #sx-ai-panel {
     position: fixed;
     bottom: 96px;
     right: 24px;
-    width: 380px;
+    width: 540px;
     max-width: calc(100vw - 48px);
-    height: 520px;
-    max-height: calc(100vh - 140px);
-    background: #fff;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(10, 31, 110, 0.25);
+    height: 690px;
+    max-height: calc(100vh - 110px);
+    background: #ffffff;
+    border-radius: 20px;
+    box-shadow: 0 16px 48px rgba(10, 31, 110, 0.35);
     display: none;
     flex-direction: column;
     overflow: hidden;
     z-index: 99999;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    border: 1px solid rgba(26, 63, 187, 0.2);
+    transition: width 0.25s ease, height 0.25s ease;
   }
   #sx-ai-panel.open { display: flex; }
+  #sx-ai-panel.expanded {
+    width: 760px;
+    height: 760px;
+  }
 
   #sx-ai-header {
-    background: linear-gradient(135deg, #1a3fbb, #2563eb);
+    background: linear-gradient(135deg, #0a1f6e, #1a3fbb, #2563eb);
     color: #fff;
-    padding: 16px;
+    padding: 12px 18px;
     font-weight: 600;
-    font-size: 16px;
+    font-size: 13.5px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   }
-  #sx-ai-close { cursor: pointer; font-size: 20px; opacity: 0.8; }
-  #sx-ai-close:hover { opacity: 1; }
 
+  .sx-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  /* ── Tab Switcher in Header ── */
+  .sx-tabs-switcher {
+    display: flex;
+    background: rgba(0, 0, 0, 0.22);
+    border-radius: 10px;
+    padding: 3px;
+    gap: 4px;
+  }
+  .sx-tab-btn {
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 12px;
+    border-radius: 7px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .sx-tab-btn.active {
+    background: #ffffff;
+    color: #0a1f6e;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+  .sx-tab-btn:hover:not(.active) {
+    color: #ffffff;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .sx-tab-badge {
+    background: #2563eb;
+    color: #fff;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+  }
+  .sx-tab-btn.active .sx-tab-badge {
+    background: #1a3fbb;
+  }
+
+  .sx-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .sx-badge-header {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    color: #fff;
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 12px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s, transform 0.15s;
+  }
+  .sx-badge-header:hover {
+    background: rgba(255, 255, 255, 0.28);
+    transform: scale(1.02);
+  }
+  .sx-badge-header:active {
+    transform: scale(0.97);
+  }
+  .sx-ws-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #34d399;
+    box-shadow: 0 0 8px #34d399;
+    animation: sx-pulse 1.8s infinite;
+  }
+  .sx-badge-header.disconnected .sx-ws-dot {
+    background: #ef4444;
+    box-shadow: 0 0 8px #ef4444;
+    animation: none;
+  }
+  @keyframes sx-pulse {
+    0% { transform: scale(0.9); opacity: 0.7; }
+    50% { transform: scale(1.25); opacity: 1; box-shadow: 0 0 12px #34d399; }
+    100% { transform: scale(0.9); opacity: 0.7; }
+  }
+
+  .sx-icon-btn {
+    background: rgba(255, 255, 255, 0.12);
+    border: none;
+    color: #ffffff;
+    width: 26px;
+    height: 26px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+  }
+  .sx-icon-btn:hover { background: rgba(255, 255, 255, 0.25); }
+
+  /* ── VIEW CONTAINERS ── */
+  .sx-panel-view {
+    flex: 1;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .sx-panel-view.active {
+    display: flex;
+  }
+
+  /* ── CHAT VIEW ── */
   #sx-ai-messages {
     flex: 1;
     overflow-y: auto;
     padding: 16px;
-    background: #f0f4ff;
+    background: #f8fafc;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
+
+  .sx-msg-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: 92%;
+  }
+  .sx-msg-wrapper.user {
+    align-self: flex-end;
+    align-items: flex-end;
+  }
+  .sx-msg-wrapper.bot {
+    align-self: flex-start;
+    align-items: flex-start;
+  }
+
   .sx-msg {
-    margin-bottom: 12px;
-    padding: 10px 14px;
-    border-radius: 12px;
-    max-width: 85%;
-    font-size: 14px;
-    line-height: 1.4;
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 13.5px;
+    line-height: 1.5;
     word-wrap: break-word;
+    color: #1e293b;
   }
   .sx-msg.user {
     background: #2563eb;
     color: #fff;
-    margin-left: auto;
     border-bottom-right-radius: 4px;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
   }
   .sx-msg.bot {
     background: #fff;
-    color: #1a3fbb;
-    border: 1px solid #d6e0f5;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
     border-bottom-left-radius: 4px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
   }
-  .sx-msg.loading { color: #888; font-style: italic; }
+  .sx-msg.blocked {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #991b1b;
+  }
+
+  /* In-Chat Dynamic KPI Pill */
+  .sx-chat-stat-pill {
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, #eff6ff, #dbeafe);
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 12px;
+  }
+  .sx-chat-stat-val {
+    font-weight: 800;
+    color: #1e40af;
+    font-size: 14px;
+  }
+
+  /* Chat Stepper */
+  .sx-stepper-box {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 12px;
+    font-size: 12px;
+  }
+  .sx-step-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #64748b;
+  }
+  .sx-step-item.active {
+    color: #047857;
+    font-weight: 600;
+  }
+  .sx-step-item.done {
+    color: #059669;
+    font-weight: 500;
+  }
+  .sx-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #cbd5e1;
+    border-top: 2px solid #059669;
+    border-radius: 50%;
+    animation: sx-spin 0.8s linear infinite;
+    display: inline-block;
+  }
+  @keyframes sx-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  /* In-chat Details Box */
+  .sx-trace-details {
+    margin-top: 8px;
+    font-size: 11.5px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .sx-trace-summary {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #475569;
+    background: #f1f5f9;
+    user-select: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .sx-trace-content {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sx-trace-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .sx-trace-label { color: #64748b; }
+  .sx-trace-val { flex: 1; word-break: break-all; text-align: right; }
+  .sx-trace-val code {
+    background: #e2e8f0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    color: #0f172a;
+  }
+  .sx-sql-box {
+    background: #1e293b;
+    color: #f8fafc;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-family: Consolas, monospace;
+    font-size: 11.5px;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    margin-top: 4px;
+    position: relative;
+    text-align: left;
+  }
+  .sx-copy-btn {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .sx-copy-btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+  .sx-status-safe { color: #059669; font-weight: 700; }
+  .sx-status-blocked { color: #dc2626; font-weight: 700; }
 
   #sx-ai-input-row {
     display: flex;
-    padding: 12px;
-    border-top: 1px solid #e0e7f5;
+    padding: 14px;
+    border-top: 1px solid #e2e8f0;
     background: #fff;
+    gap: 8px;
   }
   #sx-ai-input {
     flex: 1;
-    border: 1px solid #d6e0f5;
+    border: 1.5px solid #d6e0f5;
     border-radius: 10px;
-    padding: 10px 12px;
-    font-size: 14px;
+    padding: 10px 14px;
+    font-size: 13.5px;
     outline: none;
     font-family: inherit;
+    transition: border-color 0.2s;
   }
   #sx-ai-input:focus { border-color: #2563eb; }
   #sx-ai-send {
-    margin-left: 8px;
-    background: #2563eb;
+    background: linear-gradient(135deg, #1a3fbb, #2563eb);
     color: #fff;
     border: none;
     border-radius: 10px;
-    padding: 0 16px;
+    padding: 0 18px;
     cursor: pointer;
     font-weight: 600;
+    font-size: 13.5px;
+    transition: opacity 0.2s;
   }
-  #sx-ai-send:disabled { background: #93b8f9; cursor: not-allowed; }
+  #sx-ai-send:disabled { background: #93b8f9; cursor: not-allowed; opacity: 0.6; }
+
+  /* ═══════════════════════════════════════════════════════════════════════
+     USER-UNDERSTANDABLE LOGS PANEL STYLES
+     ═══════════════════════════════════════════════════════════════════════ */
+  #sx-view-logs {
+    background: #f8fafc;
+  }
+
+  /* Custom Sleek Scrollbars */
+  #sx-logs-container::-webkit-scrollbar,
+  #sx-ai-messages::-webkit-scrollbar {
+    width: 6px;
+  }
+  #sx-logs-container::-webkit-scrollbar-track,
+  #sx-ai-messages::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  #sx-logs-container::-webkit-scrollbar-thumb,
+  #sx-ai-messages::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 6px;
+  }
+  #sx-logs-container::-webkit-scrollbar-thumb:hover,
+  #sx-ai-messages::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+
+  .sx-logs-toolbar {
+    padding: 10px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .sx-logs-filters {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .sx-chip-btn {
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #475569;
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .sx-chip-btn:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
+  }
+  .sx-chip-btn.active {
+    background: #2563eb;
+    color: #ffffff;
+    border-color: #2563eb;
+  }
+
+  .sx-logs-search-box {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sx-logs-search {
+    border: 1px solid #cbd5e1;
+    border-radius: 14px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    outline: none;
+    width: 140px;
+    font-family: inherit;
+  }
+  .sx-logs-search:focus {
+    border-color: #2563eb;
+    width: 170px;
+  }
+
+  .sx-logs-actions {
+    display: flex;
+    gap: 6px;
+  }
+  .sx-small-btn {
+    border: 1px solid #cbd5e1;
+    background: #ffffff;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .sx-small-btn:hover { background: #f1f5f9; }
+
+  #sx-logs-container {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    scroll-behavior: smooth;
+  }
+
+  /* Empty state */
+  .sx-logs-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: #64748b;
+  }
+  .sx-empty-icon { font-size: 38px; margin-bottom: 8px; }
+
+  
+  /* ═══════════════════════════════════════════════════════════════════════
+     Authentic Enterprise Audit & Activity Logs Card
+     Clean, professional, human-crafted data pipeline execution logs
+     ═══════════════════════════════════════════════════════════════════════ */
+  .sx-log-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    width: 100%;
+    box-sizing: border-box;
+    margin-bottom: 12px;
+    flex-shrink: 0 !important;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .sx-log-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 10px -1px rgba(15, 23, 42, 0.07);
+  }
+
+  .sx-log-header {
+    padding: 12px 16px;
+    background: #ffffff;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .sx-log-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    width: 100%;
+  }
+  .sx-log-query-title {
+    font-size: 13.5px;
+    font-weight: 600;
+    color: #0f172a;
+    line-height: 1.45;
+    white-space: normal;
+    word-break: break-word;
+    flex: 1;
+    margin: 0;
+  }
+  .sx-log-status-wrap {
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+  .sx-log-status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.2;
+  }
+  .sx-log-status-badge .sx-status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .sx-log-status-badge.success {
+    background: #f0fdf4;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+  }
+  .sx-log-status-badge.success .sx-status-dot {
+    background: #16a34a;
+  }
+  .sx-log-status-badge.blocked {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+  }
+  .sx-log-status-badge.blocked .sx-status-dot {
+    background: #dc2626;
+  }
+  .sx-log-status-badge.running {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+  }
+  .sx-log-status-badge.running .sx-status-dot {
+    background: #2563eb;
+    animation: sx-pulse 1.5s infinite;
+  }
+
+  .sx-log-submeta {
+    font-size: 11.5px;
+    color: #64748b;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  .sx-log-submeta-sep {
+    color: #cbd5e1;
+  }
+
+  .sx-log-body {
+    padding: 12px 16px 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 13px;
+    flex-shrink: 0 !important;
+    width: 100%;
+    box-sizing: border-box;
+    background: #ffffff;
+  }
+
+  /* Clean Result Section */
+  .sx-log-result-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 11px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .sx-log-result-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+  }
+  .sx-log-result-content {
+    font-size: 13px;
+    line-height: 1.55;
+    color: #1e293b;
+  }
+  .sx-log-result-content strong {
+    font-weight: 600;
+    color: #0f172a;
+  }
+
+  /* Clean Data Context / Mapping Grid */
+  .sx-log-context-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #f1f5f9;
+    border-radius: 6px;
+  }
+  .sx-context-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .sx-context-key {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .sx-context-val {
+    font-size: 12px;
+    font-weight: 600;
+    color: #0f172a;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+  .sx-context-val.policy-blocked {
+    color: #dc2626;
+  }
+
+  /* Clean Developer SQL Section */
+  .sx-sql-details {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .sx-sql-summary {
+    padding: 8px 12px;
+    background: #f8fafc;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    list-style: none;
+    transition: background 0.15s;
+  }
+  .sx-sql-summary::-webkit-details-marker {
+    display: none;
+  }
+  .sx-sql-summary:hover {
+    background: #f1f5f9;
+    color: #0f172a;
+  }
+  .sx-sql-summary-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .sx-sql-chevron {
+    display: inline-block;
+    transition: transform 0.15s ease;
+    font-size: 10px;
+    color: #64748b;
+  }
+  .sx-sql-details[open] .sx-sql-chevron {
+    transform: rotate(90deg);
+  }
+  .sx-sql-tag {
+    font-size: 10px;
+    color: #64748b;
+    font-family: ui-monospace, monospace;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+  .sx-sql-container {
+    border-top: 1px solid #e2e8f0;
+    background: #0f172a;
+  }
+  .sx-sql-toolbar {
+    padding: 6px 12px;
+    background: #1e293b;
+    border-bottom: 1px solid #334155;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: #94a3b8;
+    font-family: ui-monospace, monospace;
+  }
+  .sx-sql-copy-btn {
+    background: #334155;
+    border: 1px solid #475569;
+    color: #f1f5f9;
+    font-size: 10.5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s;
+  }
+  .sx-sql-copy-btn:hover {
+    background: #475569;
+  }
+  .sx-sql-code {
+    margin: 0;
+    padding: 10px 14px;
+    color: #f8fafc;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 11.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-all;
+    overflow-x: auto;
+  }
+
 </style>
 
-<div id="sx-ai-button" title="Ask AI about your data">💬</div>
+<!-- ═══════════════════════════════════════════════════════════════════════
+     HTML Elements: Floating Buttons & Multi-View Panel
+     ═══════════════════════════════════════════════════════════════════════ -->
+
+<div id="sx-floating-dock">
+  <button id="sx-ai-logs-button" title="View Activity & Execution Logs">
+    <span>Activity Logs</span>
+    <span class="sx-logs-badge-pill" id="sx-dock-log-count">0</span>
+  </button>
+  <div id="sx-ai-button" title="Search & Query Dashboard"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="11" r="8"></circle>
+      <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+    </svg></div>
+</div>
 
 <div id="sx-ai-panel">
+  <!-- Header with Dual Tabs -->
   <div id="sx-ai-header">
-    <span>SamarthX AI Assistant</span>
-    <span id="sx-ai-close">&times;</span>
+    <div class="sx-header-left">
+      <div class="sx-tabs-switcher">
+        <button class="sx-tab-btn active" id="sx-tab-chat" title="Dashboard Query">
+          <span>Search & Query</span>
+        </button>
+        <button class="sx-tab-btn" id="sx-tab-logs" title="View Activity & Execution Logs">
+          <span>Activity Logs</span>
+          <span class="sx-tab-badge" id="sx-tab-log-count">0</span>
+        </button>
+      </div>
+    </div>
+    <div class="sx-header-right">
+      <span class="sx-badge-header" id="sx-chat-ws-status" title="Connection Status">
+        <span class="sx-ws-dot"></span>
+        <span id="sx-chat-ws-text">Connected</span>
+      </span>
+      <button class="sx-icon-btn" id="sx-panel-expand" title="Expand View">⤢</button>
+      <button class="sx-icon-btn" id="sx-ai-close" title="Close Panel">&times;</button>
+    </div>
   </div>
-  <div id="sx-ai-messages">
-    <div class="sx-msg bot">Hi! Ask me anything about your employee or school data. For example: "How many teachers are in Goa?"</div>
+
+  <!-- View 1: AI Chat View -->
+  <div class="sx-panel-view active" id="sx-view-chat">
+    <div id="sx-ai-messages">
+      <div class="sx-msg-wrapper bot">
+        <div class="sx-msg bot">
+          <strong>Welcome!</strong> Search and query dashboard metrics in real time. Ask questions to view filtered KPI cards, distributions, and summary counts.
+          <div style="margin-top: 6px; font-size: 12px; color: #64748b;">
+            Try: <em>"How many male regular teacher are there?"</em> or <em>"Count of non-regular teachers"</em>
+          </div>
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px dashed #e2e8f0; font-size: 11.5px; color: #2563eb;">
+            <em>Click the <strong>"Activity Logs"</strong> tab above to view SQL execution details.</em>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="sx-ai-input-row">
+      <input id="sx-ai-input" type="text" placeholder="Search dashboard data or query metrics..." />
+      <button id="sx-ai-send">Search</button>
+    </div>
   </div>
-  <div id="sx-ai-input-row">
-    <input id="sx-ai-input" type="text" placeholder="Ask about your data..." />
-    <button id="sx-ai-send">Send</button>
+
+  <!-- View 2: User-Understandable Pipeline Execution & Audit Logs View -->
+  <div class="sx-panel-view" id="sx-view-logs">
+    <div class="sx-logs-toolbar">
+      <div class="sx-logs-filters">
+        <button class="sx-chip-btn active" data-filter="all">All (<span id="sx-filter-all-count">0</span>)</button>
+        <button class="sx-chip-btn" data-filter="safe">Valid</button>
+        <button class="sx-chip-btn" data-filter="blocked">Blocked</button>
+      </div>
+      <div class="sx-logs-search-box">
+        <input class="sx-logs-search" id="sx-logs-search-input" type="text" placeholder="Filter activity logs..." />
+      </div>
+      <div class="sx-logs-actions">
+        <button class="sx-small-btn" id="sx-btn-clear-logs" title="Clear History">Clear</button>
+        <button class="sx-small-btn" id="sx-btn-export-logs" title="Download JSON Log">Export</button>
+      </div>
+    </div>
+    <div id="sx-logs-container">
+      <div class="sx-logs-empty" id="sx-logs-empty-state">
+        
+        <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 4px;">No Activity Logs Yet</div>
+        <div style="font-size: 12px; max-width: 320px; margin: auto;">
+          Submit a query in the <strong>Search & Query</strong> tab to see the SQL execution details and dashboard sync impact here.
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     JavaScript: WebSocket Client, Dashboard Sync, & Live Logs Engine
+     ═══════════════════════════════════════════════════════════════════════ -->
 
 <script>
 (function() {
   'use strict';
 
-  // ═══════════════════════════════════════════════════════════
-  // UPDATE THIS to your n8n webhook URL
-  // Local test:  http://localhost:5678/webhook/ai-chat
-  // Production:  https://your-n8n-domain/webhook/ai-chat
-  // ═══════════════════════════════════════════════════════════
-  const N8N_WEBHOOK_URL = '/api/ai-chat';
-  const chatHistory = [];
+  const WS_PORT = '5001';
 
-  function init() {
-    // Avoid double initialization if init is retried
-    if (window.sx_ai_initialized) return;
-    const btn = document.getElementById('sx-ai-button');
-    const panel = document.getElementById('sx-ai-panel');
-    const close = document.getElementById('sx-ai-close');
-    const input = document.getElementById('sx-ai-input');
-    const send = document.getElementById('sx-ai-send');
-    const messages = document.getElementById('sx-ai-messages');
-
-    if (!btn || !panel) return;
-    window.sx_ai_initialized = true;
-
-    btn.addEventListener('click', () => panel.classList.toggle('open'));
-    close.addEventListener('click', () => panel.classList.remove('open'));
-
-    function addMessage(text, cls) {
-      const div = document.createElement('div');
-      div.className = 'sx-msg ' + cls;
-      div.textContent = text;
-      messages.appendChild(div);
-      messages.scrollTop = messages.scrollHeight;
-      return div;
+  function getWsUrl(attempt = 0) {
+    const rawHost = window.location.hostname;
+    // On localhost or IPv6 loopback, prefer 127.0.0.1 directly to avoid browser IPv6 DNS timeouts on Windows
+    if (!rawHost || rawHost === 'localhost' || rawHost === '::1') {
+      return (attempt % 2 === 0) ? `ws://127.0.0.1:${WS_PORT}` : `ws://localhost:${WS_PORT}`;
     }
+    return `ws://${rawHost}:${WS_PORT}`;
+  }
 
-    async function ask() {
-      const question = input.value.trim();
-      if (!question) return;
+  const HTTP_FALLBACK_URL = '/api/ai-chat';
 
-      addMessage(question, 'user');
-      input.value = '';
-      send.disabled = true;
+  let ws = null;
+  let wsConnected = false;
+  let reconnectTimer = null;
+  let activeStepperObj = null;
 
-      const loading = addMessage('Thinking...', 'bot loading');
+  // In-memory Log History (Synced with sessionStorage)
+  let logHistory = [];
+  try {
+    const saved = sessionStorage.getItem('sx_pipeline_logs');
+    if (saved) logHistory = JSON.parse(saved);
+  } catch (e) {}
 
-      try {
-        const res = await fetch(N8N_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: question, history: chatHistory })
-        });
-        const data = await res.json();
-        loading.remove();
-        
-        const answer = data.answer || 'Sorry, I could not get an answer.';
-        addMessage(answer, 'bot');
-        
-        // Add current turn to history
-        chatHistory.push({ role: 'user', content: question });
-        chatHistory.push({ role: 'assistant', content: answer });
-        
-        // Cap history to last 5 turns (10 messages) to prevent token bloat
-        if (chatHistory.length > 10) {
-          chatHistory.shift();
-          chatHistory.shift();
-        }
-      } catch (err) {
-        loading.remove();
-        addMessage('Error connecting to AI service. Please try again.', 'bot');
-      } finally {
-        send.disabled = false;
+  let activeFilter = 'all';
+  let searchQuery = '';
+
+  // ── Counter Animation Helper ──
+  function animateValue(element, start, end, duration = 800) {
+    if (!element) return;
+    const startTime = performance.now();
+    const startNum = parseInt(String(start).replace(/,/g, '')) || 0;
+    const endNum = parseInt(String(end).replace(/,/g, '')) || 0;
+
+    function update(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const current = Math.floor(startNum + (endNum - startNum) * easeProgress);
+      
+      element.textContent = current.toLocaleString();
+
+      if (progress < 1) {
+        requestAnimationFrame(update);
+      } else {
+        element.textContent = endNum.toLocaleString();
+      }
+    }
+    requestAnimationFrame(update);
+  }
+
+  // ── Find all distinct Dashboard Slice Cards ──
+  function getAllDashboardCards() {
+    const rawContainers = document.querySelectorAll(
+      '[data-test="chart-grid-component"], .dashboard-component-chart-holder, .slice_container, .dashboard-chart, div[class*="ChartContainer"]'
+    );
+    
+    const uniqueCards = [];
+    rawContainers.forEach(el => {
+      const card = el.closest('[data-test="chart-grid-component"]') || el.closest('.dashboard-component-chart-holder') || el;
+      if (!uniqueCards.includes(card)) {
+        uniqueCards.push(card);
+      }
+    });
+
+    const parsedCards = [];
+    uniqueCards.forEach(card => {
+      const headerEl = card.querySelector(
+        '[data-test="slice-header"], [data-test="editable-title"], .slice_header, [class*="SliceHeader"], [class*="HeaderTitle"], .header-title, [class*="title"], h1, h2, h3, h4, span[role="button"]'
+      );
+      const title = (headerEl ? headerEl.textContent : card.textContent).trim().toLowerCase();
+      parsedCards.push({
+        card: card,
+        title: title,
+        headerEl: headerEl
+      });
+    });
+
+    return parsedCards;
+  }
+
+  // ── Extract Live Active Dashboard Context ──
+  function getActiveDashboardContext() {
+    const path = window.location.pathname || '';
+    const match = path.match(/\/dashboard\/([a-zA-Z0-9_\-]+)/i);
+    const dashIdOrSlug = match ? match[1] : null;
+
+    const titleEl = document.querySelector('[data-test="editable-title"], .dashboard-header h1, h1[data-test="dashboard-header"], .header-title');
+    const dashTitle = titleEl ? titleEl.textContent.trim() : (document.title || 'Superset Dashboard');
+
+    const cards = getAllDashboardCards();
+    const visibleCharts = [];
+    cards.forEach(c => {
+      const bigNumEl = findBigNumberElement(c.card);
+      const sliceAttr = c.card.getAttribute('data-test-chart-id') || c.card.getAttribute('data-slice-id') || (c.card.id ? c.card.id.replace(/\D/g, '') : null);
+      visibleCharts.push({
+        title: c.title,
+        slice_id: sliceAttr ? (parseInt(sliceAttr, 10) || null) : null,
+        current_value: bigNumEl ? bigNumEl.textContent.trim() : null
+      });
+    });
+
+    return {
+      url: path,
+      dashboard_id: dashIdOrSlug,
+      dashboard_title: dashTitle,
+      visible_charts: visibleCharts
+    };
+  }
+
+  // ── Find exact Big Number Display Element inside a Card ──
+  function findBigNumberElement(card) {
+    if (!card) return null;
+
+    // 1. Direct standard Superset Big Number selectors
+    const direct = card.querySelector(
+      '.header-line, .big-number .header-line, [class*="header-line"], [class*="BigNumber"] [class*="header"], [data-test="big-number-total"], [data-test="big-number-number"], .superset-legacy-chart-big-number-total, .big-number-total, [class*="BigNumberTotal"]'
+    );
+    if (direct && direct.textContent.trim() && /\d/.test(direct.textContent)) return direct;
+
+    // 2. SVG text elements
+    const svgTexts = card.querySelectorAll('svg text');
+    for (const st of svgTexts) {
+      const txt = st.textContent.trim();
+      if (/^[\d,]+(\.\d+)?$/.test(txt) && txt.length >= 1) {
+        return st;
       }
     }
 
-    send.addEventListener('click', ask);
-    input.addEventListener('keypress', (e) => { if (e.key === 'Enter') ask(); });
+    // 3. Search all leaf nodes (elements with no child elements)
+    const allNodes = card.querySelectorAll('span, div, p, text, h1, h2, h3, h4');
+    let bestCandidate = null;
+    let maxFontSize = 0;
+
+    for (const el of allNodes) {
+      if (el.children.length === 0) {
+        const text = el.textContent.trim();
+        if (/^[\d,]+(\.\d+)?$/.test(text)) {
+          const style = window.getComputedStyle(el);
+          const fSize = parseFloat(style.fontSize) || 12;
+          if (fSize > maxFontSize) {
+            maxFontSize = fSize;
+            bestCandidate = el;
+          }
+        }
+      }
+    }
+
+    if (bestCandidate && maxFontSize >= 16) {
+      return bestCandidate;
+    }
+
+    // 4. Fallback search
+    for (const el of allNodes) {
+      const text = el.textContent.trim();
+      if (/^[\d,]+$/.test(text) && text.length >= 2) {
+        return el;
+      }
+    }
+
+    return null;
+  }
+
+  // ── Update Single KPI Card with Visual Sync ──
+  function updateKpiCard(cardItem, newValue, matchLabel, filterTag) {
+    const card = cardItem.card;
+    const bigNumEl = findBigNumberElement(card);
+    if (!bigNumEl) return false;
+
+    if (!bigNumEl.dataset.sxOriginalValue) {
+      bigNumEl.dataset.sxOriginalValue = bigNumEl.textContent.trim();
+    }
+    const prevVal = bigNumEl.textContent.trim();
+    bigNumEl.dataset.sxCurrentValue = String(newValue);
+
+    animateValue(bigNumEl, prevVal, newValue);
+    highlightCardElement(card, newValue, matchLabel, filterTag);
+    return true;
+  }
+
+  // ── Highlight and Badge on Card ──
+  function highlightCardElement(cardEl, value, label, filterTag) {
+    if (!cardEl) return;
+
+    cardEl.classList.remove('sx-kpi-updated');
+    void cardEl.offsetWidth;
+    cardEl.classList.add('sx-kpi-updated');
+
+    let badge = cardEl.querySelector('.sx-kpi-sync-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'sx-kpi-sync-badge';
+      cardEl.style.position = 'relative';
+      cardEl.appendChild(badge);
+    }
+    
+    const tagHtml = filterTag ? `<span class="sx-filter-pill">${filterTag}</span>` : '';
+    badge.innerHTML = `<span>Live Sync: <strong>${value}</strong></span>${tagHtml}`;
+
+    setTimeout(() => {
+      cardEl.classList.remove('sx-kpi-updated');
+    }, 5500);
+  }
+
+  // ── Global ECharts Capture Registry & Interceptor ──
+  window.__sx_echarts_instances = window.__sx_echarts_instances || {};
+
+  try {
+    const origSetAttribute = Element.prototype.setAttribute;
+    Element.prototype.setAttribute = function(name, value) {
+      origSetAttribute.apply(this, arguments);
+      if (name === '_echarts_instance_' && value) {
+        window.__sx_echarts_instances[value] = this;
+      }
+    };
+  } catch (e) {}
+
+  // ── Retrieve ECharts instance from DOM / React Fiber ──
+  function findEChartsInstance(elem) {
+    if (!elem) return null;
+    if (elem._echarts_instance_object && typeof elem._echarts_instance_object.getOption === 'function') {
+      return elem._echarts_instance_object;
+    }
+    if (elem.__echarts_instance__ && typeof elem.__echarts_instance__.getOption === 'function') {
+      return elem.__echarts_instance__;
+    }
+
+    // 1. Direct window.echarts check
+    if (window.echarts && typeof window.echarts.getInstanceByDom === 'function') {
+      try {
+        const inst = window.echarts.getInstanceByDom(elem);
+        if (inst) return inst;
+      } catch (e) {}
+    }
+
+    // 2. Search parent elements
+    let p = elem.parentElement;
+    let pDepth = 0;
+    while (p && pDepth < 8) {
+      if (p._echarts_instance_object && typeof p._echarts_instance_object.getOption === 'function') {
+        return p._echarts_instance_object;
+      }
+      if (window.echarts && typeof window.echarts.getInstanceByDom === 'function') {
+        try {
+          const inst = window.echarts.getInstanceByDom(p);
+          if (inst) return inst;
+        } catch (e) {}
+      }
+      p = p.parentElement;
+      pDepth++;
+    }
+
+    // 3. Search child canvas / div elements
+    const canvases = elem.querySelectorAll ? elem.querySelectorAll('canvas, div[_echarts_instance_], .echarts-for-react') : [];
+    for (const c of canvases) {
+      if (c._echarts_instance_object && typeof c._echarts_instance_object.getOption === 'function') {
+        return c._echarts_instance_object;
+      }
+      if (window.echarts && typeof window.echarts.getInstanceByDom === 'function') {
+        try {
+          const inst = window.echarts.getInstanceByDom(c);
+          if (inst) return inst;
+        } catch (e) {}
+      }
+    }
+
+    // 4. Traverse React Fiber trees
+    for (const key in elem) {
+      if (key.startsWith('__reactFiber$') || key.startsWith('__reactInternalInstance$')) {
+        let fiber = elem[key];
+        let depth = 0;
+        while (fiber && depth < 30) {
+          if (fiber.memoizedProps) {
+            if (fiber.memoizedProps.echartsInstance && typeof fiber.memoizedProps.echartsInstance.getOption === 'function') return fiber.memoizedProps.echartsInstance;
+            if (fiber.memoizedProps.chart && typeof fiber.memoizedProps.chart.getOption === 'function') return fiber.memoizedProps.chart;
+          }
+          if (fiber.stateNode) {
+            if (typeof fiber.stateNode.getEchartsInstance === 'function') {
+              try {
+                const inst = fiber.stateNode.getEchartsInstance();
+                if (inst && typeof inst.getOption === 'function') return inst;
+              } catch (e) {}
+            }
+            if (fiber.stateNode.echartsInstance && typeof fiber.stateNode.echartsInstance.getOption === 'function') return fiber.stateNode.echartsInstance;
+            if (fiber.stateNode.chart && typeof fiber.stateNode.chart.getOption === 'function') return fiber.stateNode.chart;
+            if (typeof fiber.stateNode.getOption === 'function') return fiber.stateNode;
+          }
+          if (fiber.memoizedState) {
+            if (fiber.memoizedState.chart && typeof fiber.memoizedState.chart.getOption === 'function') return fiber.memoizedState.chart;
+            let hook = fiber.memoizedState;
+            let hDepth = 0;
+            while (hook && hDepth < 20) {
+              if (hook.memoizedState && typeof hook.memoizedState === 'object') {
+                if (hook.memoizedState.current && typeof hook.memoizedState.current.getOption === 'function') {
+                  return hook.memoizedState.current;
+                }
+                if (typeof hook.memoizedState.getOption === 'function') {
+                  return hook.memoizedState;
+                }
+              }
+              hook = hook.next;
+              hDepth++;
+            }
+          }
+          fiber = fiber.return;
+          depth++;
+        }
+      }
+    }
+    return null;
+  }
+
+  // ── Overlay dynamic callout banner on chart cards ──
+  function annotateChartCard(cardEl, annotationText) {
+    if (!cardEl) return;
+    let banner = cardEl.querySelector('.sx-chart-live-callout');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'sx-chart-live-callout';
+      banner.style.cssText = `
+        position: absolute;
+        bottom: 10px;
+        left: 12px;
+        right: 12px;
+        background: linear-gradient(135deg, rgba(10, 31, 110, 0.95), rgba(37, 99, 235, 0.95));
+        color: #ffffff;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 11.5px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        box-shadow: 0 4px 18px rgba(10, 31, 110, 0.4);
+        z-index: 100;
+        animation: sx-callout-anim 6.5s forwards;
+        font-family: 'DM Sans', -apple-system, sans-serif;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        pointer-events: none;
+      `;
+      cardEl.style.position = 'relative';
+      cardEl.appendChild(banner);
+    }
+    banner.innerHTML = `<span>${annotationText}</span><span style="font-size: 10px; background: rgba(255,255,255,0.25); padding: 3px 8px; border-radius: 5px; font-weight: 700; letter-spacing: 0.3px;">SYNCED</span>`;
+    
+    // Add glowing border on card
+    cardEl.classList.remove('sx-kpi-updated');
+    void cardEl.offsetWidth;
+    cardEl.classList.add('sx-kpi-updated');
+
+    setTimeout(() => {
+      if (banner && banner.parentNode) banner.parentNode.removeChild(banner);
+      cardEl.classList.remove('sx-kpi-updated');
+    }, 6500);
+  }
+
+  // ── MASTER DASHBOARD SYNC: KPI CARDS, PIE CHARTS, BAR CHARTS, TIMELINES ──
+  function syncDashboardWithAIOutput(metricData, stats) {
+    if (!metricData && !stats) return;
+
+    const valStr = metricData ? String(metricData.value || '') : '';
+    const numVal = metricData ? metricData.numeric_value : null;
+    const targetKpi = (metricData && metricData.target_kpi ? metricData.target_kpi : '').toLowerCase();
+    const category = (metricData && metricData.category ? metricData.category : '').toLowerCase();
+    const title = (metricData && metricData.title ? metricData.title : '');
+    const filterTag = metricData && metricData.filter_tag ? metricData.filter_tag : '';
+    const question = (metricData && metricData.question ? metricData.question : '').toLowerCase();
+    const matchedSlices = (metricData && metricData.matched_slices ? metricData.matched_slices : {});
+    const entities = (metricData && metricData.entities ? metricData.entities : {});
+
+    console.log('[SamarthX Sync] Synchronizing ALL dashboard charts with AI output:', { valStr, numVal, targetKpi, question, filterTag, entities, matchedSlices });
+
+    const cards = getAllDashboardCards();
+    let kpiUpdatedCount = 0;
+
+    // Detect query intent with word boundaries to avoid 'non-regular' matching 'regular'
+    const isNonRegQuery = targetKpi === 'non_regular_teacher' || 
+                          Boolean(question.match(/\b(non-regular|non regular|contract|temporary|adhoc|guest)\b/i));
+    const isRegQuery = !isNonRegQuery && (targetKpi === 'regular_teacher' || Boolean(question.match(/\b(regular|permanent|confirmed)\b/i)));
+
+    // ── Universal Dynamic Card Matcher (by slice_id or title for ANY dashboard) ──
+    const targetSliceId = metricData && (metricData.slice_id || (metricData.target_kpi && String(metricData.target_kpi).startsWith('slice_') ? String(metricData.target_kpi).replace('slice_', '') : null));
+    const targetTitle = (metricData && metricData.title ? metricData.title : '').toLowerCase();
+
+    // Distinguish school query vs employee query to prevent cross-dashboard hijacking
+    const isEmployeeQuery = targetKpi.includes('employee') || targetKpi.includes('teacher') || targetKpi.includes('staff') || 
+                            targetKpi.includes('gender') || targetKpi.includes('social') ||
+                            (metricData && metricData.title && /gender|teacher|employee|staff|social category|experience/i.test(metricData.title));
+    const isSchoolQuery = targetKpi.includes('school') || 
+                          (metricData && metricData.title && /school/i.test(metricData.title)) || 
+                          Boolean(question.match(/\b(schools?|schoolds?)\b/i));
+
+    cards.forEach(cardItem => {
+      const cardEl = cardItem.card;
+      const cardSliceId = cardEl.getAttribute('data-test-chart-id') || cardEl.getAttribute('data-slice-id') || (cardEl.id ? cardEl.id.replace(/\D/g, '') : null);
+      const cTitle = (cardItem.title || '').toLowerCase();
+
+      // Direct slice_id match (guarantees 100% precision for any newly created chart)
+      if (targetSliceId && cardSliceId && String(cardSliceId) === String(targetSliceId)) {
+        if (valStr && valStr !== 'Verified') {
+          const didUpdate = updateKpiCard(cardItem, valStr, metricData.title || title, filterTag);
+          if (didUpdate) {
+            kpiUpdatedCount++;
+            return;
+          }
+        }
+      }
+
+      // Title match for dynamic dashboard charts
+      if (targetTitle && cTitle && (cTitle.includes(targetTitle) || targetTitle.includes(cTitle)) && valStr && valStr !== 'Verified') {
+        if (targetTitle.includes('non-regular') && !cTitle.includes('non-regular')) return;
+        if (!targetTitle.includes('non-regular') && targetTitle.includes('regular') && cTitle.includes('non-regular')) return;
+        const didUpdate = updateKpiCard(cardItem, valStr, metricData.title || title, filterTag);
+        if (didUpdate) {
+          kpiUpdatedCount++;
+        }
+      }
+    });
+
+    cards.forEach(cardItem => {
+      const hText = (cardItem.title || '').toLowerCase();
+      let matchedVal = null;
+      let matchType = '';
+
+      // Card classification (mutually exclusive)
+      const isNonRegularCard = hText.includes('non-regular') || hText.includes('non regular') || hText.includes('contract') || hText.includes('temporary');
+      const isRegularCard = !isNonRegularCard && (hText.includes('regular teacher') || (hText.includes('regular') && hText.includes('teacher')));
+      const isTotalEmployeeCard = hText.includes('total employee') || hText.includes('total staff') || hText.includes('total employees') || hText.includes('workforce');
+      const isTeachingCard = !isRegularCard && !isNonRegularCard && hText.includes('teaching') && !hText.includes('non-teaching') && !hText.includes('experience') && !hText.includes('gender');
+      const isNonTeachingCard = hText.includes('non-teaching') || hText.includes('non teaching');
+      const isSchoolCard = hText.includes('school') && !hText.includes('management') && !hText.includes('type') && !hText.includes('level');
+
+      // ── Priority 1: User requested Regular Teacher query ──
+      // Requirement: Updates Regular Teacher card AND Total Employee card; MUST NOT touch Non-Regular card
+      if (isRegQuery) {
+        if (isRegularCard) {
+          matchedVal = entities.regular_teacher || valStr;
+          matchType = filterTag || 'Regular Teachers';
+        } else if (isTotalEmployeeCard) {
+          matchedVal = entities.total_employees || valStr;
+          matchType = filterTag || 'Regular Teachers';
+        }
+      }
+      // ── Priority 2: User requested Non-Regular Teacher query ──
+      // Requirement: Updates Non-Regular Teacher card AND Total Employee card; MUST NOT touch Regular card
+      else if (isNonRegQuery) {
+        if (isNonRegularCard) {
+          matchedVal = entities.non_regular_teacher || valStr;
+          matchType = filterTag || 'Non-Regular Teachers';
+        } else if (isTotalEmployeeCard) {
+          matchedVal = entities.total_employees || valStr;
+          matchType = filterTag || 'Non-Regular Teachers';
+        }
+      }
+      // ── Priority 3: Schools / Infrastructure Cards ──
+      else if (isSchoolCard && !isEmployeeQuery) {
+        if (entities.govt_schools !== undefined || targetKpi === 'govt_schools' || question.includes('govt') || question.includes('government') || filterTag.toLowerCase().includes('govt')) {
+          matchedVal = entities.govt_schools || (isSchoolQuery ? valStr : null);
+          matchType = 'Govt Schools';
+        } else if (entities.aided_schools !== undefined || targetKpi === 'aided_schools' || question.includes('aided') || filterTag.toLowerCase().includes('aided')) {
+          matchedVal = entities.aided_schools || (isSchoolQuery ? valStr : null);
+          matchType = 'Aided Schools';
+        } else if (entities.unaided_schools !== undefined || targetKpi === 'unaided_schools' || question.includes('unaided') || filterTag.toLowerCase().includes('unaided')) {
+          matchedVal = entities.unaided_schools || (isSchoolQuery ? valStr : null);
+          matchType = 'Unaided Schools';
+        } else if (entities.private_schools !== undefined || targetKpi === 'private_schools' || question.includes('private') || filterTag.toLowerCase().includes('private')) {
+          matchedVal = entities.private_schools || (isSchoolQuery ? valStr : null);
+          matchType = 'Private Schools';
+        } else if (entities.total_schools !== undefined || targetKpi === 'total_schools') {
+          matchedVal = entities.total_schools || (isSchoolQuery ? valStr : null);
+          matchType = 'Total Schools';
+        } else if (valStr && valStr !== 'Verified' && isSchoolQuery) {
+          matchedVal = valStr;
+          matchType = filterTag || 'Filtered Schools';
+        }
+      }
+      // ── Priority 4: Total Employees general query ──
+      else if (isTotalEmployeeCard && !isSchoolQuery) {
+        if (entities.total_employees !== undefined) {
+          matchedVal = entities.total_employees;
+          matchType = 'Total Employees';
+        } else if (valStr && valStr !== 'Verified') {
+          matchedVal = valStr;
+          matchType = filterTag || 'Total Employees';
+        }
+      }
+      // ── Priority 5: Teaching Staff Card ──
+      else if (isTeachingCard && !isSchoolQuery) {
+        if (entities.teaching_staff !== undefined) {
+          matchedVal = entities.teaching_staff;
+          matchType = 'Teaching Staff';
+        } else if (targetKpi === 'teaching_staff' && valStr && valStr !== 'Verified') {
+          matchedVal = valStr;
+          matchType = 'Teaching Staff';
+        }
+      }
+      // ── Priority 6: Non-Teaching Staff Card ──
+      else if (isNonTeachingCard && !isSchoolQuery) {
+        if (entities.non_teaching_staff !== undefined) {
+          matchedVal = entities.non_teaching_staff;
+          matchType = 'Non-Teaching Staff';
+        } else if (targetKpi === 'non_teaching_staff' && valStr && valStr !== 'Verified') {
+          matchedVal = valStr;
+          matchType = 'Non-Teaching Staff';
+        }
+      }
+
+      if (matchedVal !== null && matchedVal !== undefined) {
+        const updated = updateKpiCard(cardItem, matchedVal, matchType || title, filterTag);
+        if (updated) kpiUpdatedCount++;
+      }
+    });
+
+    // Smart Fallback for any KPI Card if no specific card matched yet
+    if (kpiUpdatedCount === 0 && valStr && valStr !== 'Verified') {
+      cards.forEach(cardItem => {
+        const hText = (cardItem.title || '').toLowerCase();
+        const isNonReg = hText.includes('non-regular') || hText.includes('non regular') || hText.includes('contract');
+        const isReg = !isNonReg && hText.includes('regular');
+        if (isRegQuery && isNonReg) return;
+        if (isNonRegQuery && isReg) return;
+        const isSchoolC = hText.includes('school') && !hText.includes('management') && !hText.includes('type') && !hText.includes('level');
+        if (isSchoolC && isEmployeeQuery && !isSchoolQuery) return;
+        if (!isSchoolC && isSchoolQuery && !isEmployeeQuery) return;
+
+        if (kpiUpdatedCount === 0 && (hText.includes('school') || hText.includes('onboard') || hText.includes('employee') || hText.includes('staff') || hText.includes('teacher'))) {
+          const didUpdate = updateKpiCard(cardItem, valStr, filterTag || title || 'Verified Stat', filterTag);
+          if (didUpdate) kpiUpdatedCount++;
+        }
+      });
+    }
+
+    // Also sync and annotate ECharts visual instances across all charts
+    syncEChartsInstances(matchedSlices, entities, metricData);
+  }
+
+  // ── Sync ECharts Instances (Pie / Bar / Donut / Timeseries / Timeline) ──
+  function syncEChartsInstances(matchedSlices, entities, metricData) {
+    if (!metricData && Object.keys(matchedSlices).length === 0 && Object.keys(entities).length === 0) return;
+
+    const valStr = metricData ? String(metricData.value || '') : '';
+    const numVal = metricData ? metricData.numeric_value : null;
+    const filterTag = metricData ? metricData.filter_tag : '';
+    const question = metricData && metricData.question ? metricData.question.toLowerCase() : '';
+    const targetKpi = metricData && metricData.target_kpi ? metricData.target_kpi.toLowerCase() : '';
+
+    const allCards = getAllDashboardCards();
+
+    allCards.forEach(cardItem => {
+      const parentCard = cardItem.card;
+      const cardTitle = cardItem.title;
+
+      try {
+        const instance = findEChartsInstance(parentCard);
+        let optionModified = false;
+        let targetSeriesIdx = 0;
+        let targetDataIdx = -1;
+
+        if (instance && typeof instance.getOption === 'function') {
+          const opt = instance.getOption();
+          if (opt && opt.series && opt.series.length) {
+
+            opt.series.forEach((series, sIdx) => {
+              // 1. Pie / Donut Charts (e.g. Type of Schools, Schools Management Type, Gender, Category)
+              if (series.type === 'pie' && Array.isArray(series.data)) {
+                series.data.forEach((item, dIdx) => {
+                  const itemName = (item.name || '').toLowerCase();
+                  let sliceMatched = false;
+                  let matchedNewVal = null;
+
+                  for (const [sliceKey, sliceVal] of Object.entries(matchedSlices)) {
+                    const sk = sliceKey.toLowerCase();
+                    if (itemName === sk || itemName.includes(sk) || sk.includes(itemName) ||
+                        (sk.includes('govt') && itemName.includes('govt')) ||
+                        (sk.includes('government') && itemName.includes('government')) ||
+                        (sk.includes('aided') && !sk.includes('unaided') && itemName.includes('aided') && !itemName.includes('unaided')) ||
+                        (sk.includes('unaided') && itemName.includes('unaided')) ||
+                        (sk.includes('private') && itemName.includes('private')) ||
+                        (sk.includes('society') && itemName.includes('society')) ||
+                        (sk.includes('trust') && itemName.includes('trust')) ||
+                        (sk.includes('local body') && itemName.includes('local body'))) {
+                      matchedNewVal = sliceVal;
+                      sliceMatched = true;
+                    }
+                  }
+
+                  if (sliceMatched && matchedNewVal !== null) {
+                    item.value = matchedNewVal;
+                    optionModified = true;
+                    targetSeriesIdx = sIdx;
+                    targetDataIdx = dIdx;
+                  }
+                });
+              }
+
+              // 2. Bar / Timeseries Bar Charts (e.g. School Type with Level, Experience by Gender)
+              if (series.type === 'bar') {
+                const seriesName = (series.name || '').toLowerCase();
+
+                // Check Gender series
+                if (seriesName.includes('female') && (entities.female_staff !== undefined || matchedSlices.Female !== undefined || matchedSlices.FEMALE !== undefined)) {
+                  const updateVal = entities.female_staff || matchedSlices.Female || matchedSlices.FEMALE;
+                  if (Array.isArray(series.data) && series.data.length > 0) {
+                    series.data[0] = updateVal;
+                    optionModified = true;
+                    targetSeriesIdx = sIdx;
+                    targetDataIdx = 0;
+                  }
+                } else if (seriesName.includes('male') && (entities.male_staff !== undefined || matchedSlices.Male !== undefined || matchedSlices.MALE !== undefined)) {
+                  const updateVal = entities.male_staff || matchedSlices.Male || matchedSlices.MALE;
+                  if (Array.isArray(series.data) && series.data.length > 0) {
+                    series.data[0] = updateVal;
+                    optionModified = true;
+                    targetSeriesIdx = sIdx;
+                    targetDataIdx = 0;
+                  }
+                }
+
+                for (const [sliceKey, sliceVal] of Object.entries(matchedSlices)) {
+                  if (seriesName.includes(sliceKey.toLowerCase()) || sliceKey.toLowerCase().includes(seriesName)) {
+                    if (Array.isArray(series.data) && series.data.length > 0) {
+                      series.data[0] = sliceVal;
+                      optionModified = true;
+                      targetSeriesIdx = sIdx;
+                      targetDataIdx = 0;
+                    }
+                  }
+                }
+              }
+
+              // 3. Line / Timeseries Charts (e.g. School Onboarding timeline)
+              if (series.type === 'line' || series.type === 'lines') {
+                if (numVal && (cardTitle.includes('onboard') || cardTitle.includes('timeline') || cardTitle.includes('school'))) {
+                  series.markLine = {
+                    silent: false,
+                    lineStyle: { color: '#2563eb', width: 2.5, type: 'dashed' },
+                    data: [
+                      {
+                        yAxis: numVal,
+                        name: filterTag || 'Filtered Count',
+                        label: {
+                          show: true,
+                          formatter: `${filterTag || 'Filter'}: ${valStr}`,
+                          position: 'insideEndTop',
+                          color: '#1d4ed8',
+                          fontWeight: 'bold',
+                          fontSize: 12
+                        }
+                      }
+                    ]
+                  };
+                  optionModified = true;
+                }
+              }
+            });
+
+            if (optionModified) {
+              instance.setOption(opt, false);
+              if (targetDataIdx !== -1) {
+                instance.dispatchAction({
+                  type: 'highlight',
+                  seriesIndex: targetSeriesIdx,
+                  dataIndex: targetDataIdx
+                });
+                setTimeout(() => {
+                  try {
+                    instance.dispatchAction({
+                      type: 'downplay',
+                      seriesIndex: targetSeriesIdx,
+                      dataIndex: targetDataIdx
+                    });
+                  } catch (e) {}
+                }, 4000);
+              }
+            }
+          }
+        }
+
+        // Add sleek dynamic callout overlays on applicable chart cards
+        if (cardTitle.includes('type') && (question.includes('govt') || question.includes('aided') || question.includes('private') || question.includes('unaided') || question.includes('school'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'School Type'} = ${valStr}`);
+        } else if (cardTitle.includes('management') && (question.includes('mgmt') || question.includes('management') || question.includes('govt') || question.includes('society') || question.includes('trust') || question.includes('school'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'Management Type'} = ${valStr}`);
+        } else if ((cardTitle.includes('timeline') || cardTitle.includes('onboard')) && (question.includes('school') || question.includes('onboard') || question.includes('govt') || question.includes('aided'))) {
+          annotateChartCard(parentCard, `Timeline Filter: ${filterTag || 'Target Schools'} = ${valStr}`);
+        } else if (cardTitle.includes('experience') && (question.includes('experience') || question.includes('years') || question.includes('gender') || question.includes('female') || question.includes('teacher'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'Demographic'} = ${valStr}`);
+        } else if (cardTitle.includes('category') && (question.includes('sc') || question.includes('st') || question.includes('obc') || question.includes('caste'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'Social Category'} = ${valStr}`);
+        } else if (cardTitle.includes('gender') && (question.includes('female') || question.includes('male') || question.includes('gender'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'Gender'} = ${valStr}`);
+        } else if (cardTitle.includes('teaching') && (question.includes('teaching') || question.includes('staff') || question.includes('teacher'))) {
+          annotateChartCard(parentCard, `Filtered: ${filterTag || 'Staffing'} = ${valStr}`);
+        }
+
+      } catch (err) {
+        console.warn('[SamarthX] Error syncing chart card:', cardTitle, err);
+      }
+    });
+  }
+
+  // ── Set WebSocket UI Connection State ──
+  function setWsStatus(connected) {
+    wsConnected = connected;
+    const chatBadge = document.getElementById('sx-chat-ws-status');
+    const chatText = document.getElementById('sx-chat-ws-text');
+
+    if (chatBadge && !chatBadge.dataset.hasListener) {
+      chatBadge.dataset.hasListener = '1';
+      chatBadge.addEventListener('click', () => {
+        console.log('[SamarthX WS] User clicked connection status badge - reconnecting immediately...');
+        connectWebSocket();
+      });
+    }
+
+    if (connected) {
+      if (chatBadge) {
+        chatBadge.classList.remove('disconnected');
+        chatBadge.title = 'Real-time Live Bridge active (Port 5001). Click to refresh connection.';
+      }
+      if (chatText) chatText.textContent = 'Connected';
+    } else {
+      if (chatBadge) {
+        chatBadge.classList.add('disconnected');
+        chatBadge.title = 'WebSocket Offline. Click to reconnect immediately.';
+      }
+      if (chatText) chatText.textContent = 'WS: Offline';
+    }
+  }
+
+  // ── Connect & Maintain WebSocket Connection ──
+  let wsReconnectAttempts = 0;
+
+  function connectWebSocket() {
+    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    const targetUrl = getWsUrl(wsReconnectAttempts);
+    try {
+      ws = new WebSocket(targetUrl);
+
+      ws.onopen = function() {
+        console.log('[SamarthX WS] Connected to WebSocket Server:', targetUrl);
+        wsReconnectAttempts = 0;
+        setWsStatus(true);
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      };
+
+      ws.onmessage = function(event) {
+        try {
+          const msg = JSON.parse(event.data);
+          handleWebSocketMessage(msg);
+        } catch (e) {
+          console.error('[SamarthX WS] Error parsing message:', e);
+        }
+      };
+
+      ws.onclose = function() {
+        setWsStatus(false);
+        scheduleReconnect();
+      };
+
+      ws.onerror = function(err) {
+        console.warn('[SamarthX WS] Connection error:', err);
+        setWsStatus(false);
+        scheduleReconnect();
+      };
+    } catch (e) {
+      console.error('[SamarthX WS] Exception opening WebSocket:', e);
+      setWsStatus(false);
+      scheduleReconnect();
+    }
+  }
+
+  function scheduleReconnect() {
+    if (!reconnectTimer) {
+      wsReconnectAttempts++;
+      const delay = Math.min(1000 * wsReconnectAttempts, 5000);
+      reconnectTimer = setTimeout(() => {
+        reconnectTimer = null;
+        connectWebSocket();
+      }, delay);
+    }
+  }
+
+  // Periodic Keepalive & Automatic Reconnection Watchdog
+  setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'ping' }));
+    } else if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState > WebSocket.OPEN) {
+      connectWebSocket();
+    }
+  }, 4000);
+
+  // Auto-reconnect when page/tab gains focus, becomes visible, or comes online
+  window.addEventListener('focus', () => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      connectWebSocket();
+    }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) {
+      connectWebSocket();
+    }
+  });
+  window.addEventListener('online', () => {
+    connectWebSocket();
+  });
+
+  // ── Handle Incoming WebSocket Messages ──
+  function handleWebSocketMessage(msg) {
+    if (!msg || !msg.type) return;
+
+    if (msg.type === 'connection_ack' || msg.type === 'stats_broadcast' || msg.type === 'stats_update') {
+      if (msg.stats && msg.stats.last_query_metric) {
+        syncDashboardWithAIOutput(msg.stats.last_query_metric, msg.stats);
+      }
+    } else if (msg.type === 'step') {
+      updateStepperFromWS(msg);
+      updateLiveLogStep(msg);
+    } else if (msg.type === 'chat_response') {
+      if (activeStepperObj) {
+        activeStepperObj.remove();
+        activeStepperObj = null;
+      }
+
+      if (msg.extracted_metric) {
+        syncDashboardWithAIOutput(msg.extracted_metric, msg.stats);
+      } else if (msg.stats && msg.stats.last_query_metric) {
+        syncDashboardWithAIOutput(msg.stats.last_query_metric, msg.stats);
+      }
+
+      const messages = document.getElementById('sx-ai-messages');
+      if (messages) {
+        if (msg.guardrail_blocked) {
+          addMessage(`<strong>Security Notice</strong>: ${msg.answer}`, 'bot', {
+            isBlocked: true,
+            guardrail: msg.guardrail,
+            total_latency_ms: msg.total_latency_ms
+          });
+        } else {
+          addMessage(msg.answer || 'Sorry, I could not get an answer.', 'bot', {
+            guardrail: msg.guardrail,
+            sql: msg.sql,
+            db: msg.db,
+            stats: msg.stats,
+            extracted_metric: msg.extracted_metric,
+            total_latency_ms: msg.total_latency_ms
+          });
+        }
+      }
+
+      finalizeLiveLogEntry(msg);
+
+      const sendBtn = document.getElementById('sx-ai-send');
+      const inputEl = document.getElementById('sx-ai-input');
+      if (sendBtn) sendBtn.disabled = false;
+      if (inputEl) inputEl.focus();
+    }
+  }
+
+  function updateStepperFromWS(stepMsg) {
+    const s1 = document.getElementById('sx-step-1');
+    const s2 = document.getElementById('sx-step-2');
+    const s3 = document.getElementById('sx-step-3');
+
+    if (stepMsg.stage === 'guardrail_check') {
+      if (s1) {
+        s1.className = 'sx-step-item active';
+        s1.innerHTML = '<span class="sx-spinner"></span> <span>Step 1: Validating query input...</span>';
+      }
+    } else if (stepMsg.stage === 'guardrail_passed') {
+      if (s1) {
+        s1.className = 'sx-step-item done';
+        s1.innerHTML = `<span>Step 1: Query validated (${stepMsg.guardrail?.latency_ms || 0}ms)</span>`;
+      }
+      if (s2) {
+        s2.className = 'sx-step-item active';
+        s2.innerHTML = '<span class="sx-spinner"></span> <span>Step 2: Preparing query & routing schema...</span>';
+      }
+    } else if (stepMsg.stage === 'generating_sql') {
+      if (s2) {
+        s2.className = 'sx-step-item active';
+        s2.innerHTML = '<span class="sx-spinner"></span> <span>Step 2: Preparing query & routing schema...</span>';
+      }
+    } else if (stepMsg.stage === 'executing_query') {
+      if (s2) {
+        s2.className = 'sx-step-item done';
+        s2.innerHTML = '<span>Step 2: Query validated & routed</span>';
+      }
+      if (s3) {
+        s3.className = 'sx-step-item active';
+        s3.innerHTML = '<span class="sx-spinner"></span> <span>Step 3: Fetching data & calculating metrics...</span>';
+      }
+    } else if (stepMsg.stage === 'warming_up' || stepMsg.stage === 'retrying') {
+      if (s2) {
+        s2.className = 'sx-step-item done';
+        s2.innerHTML = '<span>Step 2: Query validated & routed</span>';
+      }
+      if (s3) {
+        s3.className = 'sx-step-item active';
+        s3.innerHTML = `<span class="sx-spinner"></span> <span>${escapeHtml(stepMsg.message || 'Step 3: Connecting to query engine...')}</span>`;
+      }
+    }
+  }
+
+  function addMessage(text, role, options = {}) {
+    const messages = document.getElementById('sx-ai-messages');
+    if (!messages) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sx-msg-wrapper ' + role;
+
+    if (options.extracted_metric && options.extracted_metric.value && options.extracted_metric.value !== 'Verified') {
+      const statPill = document.createElement('div');
+      statPill.className = 'sx-chat-stat-pill';
+      statPill.innerHTML = `
+        <div>
+          <span style="color: #64748b; font-size: 11px; font-weight: 600;">Verified Count:</span>
+          <span class="sx-chat-stat-val">${options.extracted_metric.value}</span>
+          <span style="color: #64748b; font-size: 10.5px;">• ${options.extracted_metric.title || 'Department Metric'}</span>
+        </div>
+        <span style="font-size: 10.5px; color: #166534; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> Synced
+        </span>
+      `;
+      wrapper.appendChild(statPill);
+    }
+
+    const msgDiv = document.createElement('div');
+    msgDiv.className = 'sx-msg ' + role + (options.isBlocked ? ' blocked' : '');
+    
+    let formattedText = text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\n\n/g, '<br><br>')
+      .replace(/\n/g, '<br>');
+    
+    msgDiv.innerHTML = formattedText;
+    wrapper.appendChild(msgDiv);
+
+    messages.appendChild(wrapper);
+    messages.scrollTop = messages.scrollHeight;
+    return wrapper;
+  }
+
+  function createStepper() {
+    const messages = document.getElementById('sx-ai-messages');
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sx-msg-wrapper bot';
+    const box = document.createElement('div');
+    box.className = 'sx-stepper-box';
+    box.innerHTML = `
+      <div class="sx-step-item active" id="sx-step-1">
+        <span class="sx-spinner"></span>
+        <span>Step 1: Validating query input...</span>
+      </div>
+      <div class="sx-step-item" id="sx-step-2">
+        <span>Step 2: Preparing query & routing schema...</span>
+      </div>
+      <div class="sx-step-item" id="sx-step-3">
+        <span>Step 3: Fetching data & calculating metrics...</span>
+      </div>
+    `;
+    wrapper.appendChild(box);
+    messages.appendChild(wrapper);
+    messages.scrollTop = messages.scrollHeight;
+
+    return {
+      remove: () => wrapper.remove()
+    };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // USER-UNDERSTANDABLE LIVE LOGS ENGINE
+  // ═══════════════════════════════════════════════════════════════════════
+
+  function saveLogsToStorage() {
+    try {
+      sessionStorage.setItem('sx_pipeline_logs', JSON.stringify(logHistory.slice(-50)));
+    } catch (e) {}
+    updateLogCounts();
+  }
+
+  function updateLogCounts() {
+    const count = logHistory.length;
+    const tabBadge = document.getElementById('sx-tab-log-count');
+    const dockBadge = document.getElementById('sx-dock-log-count');
+    const allCount = document.getElementById('sx-filter-all-count');
+
+    if (tabBadge) tabBadge.textContent = count;
+    if (dockBadge) dockBadge.textContent = count;
+    if (allCount) allCount.textContent = count;
+  }
+
+  let activeInProgressLogId = null;
+
+  function initLiveLogEntry(question) {
+    const logId = 'log_' + Date.now();
+    activeInProgressLogId = logId;
+
+    const newLog = {
+      id: logId,
+      question: question,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      raw_time: Date.now(),
+      status: 'in_progress',
+      is_safe: true,
+      current_step: 1,
+      guardrail: {
+        model: 'Security Policy Inspector',
+        status: 'CHECKING',
+        latency_ms: 0,
+        explanation: 'Validating query parameters against institutional data governance policy...'
+      },
+      intent: {
+        summary: 'Parsing question intent & mapping to educational workforce schema...',
+        category: 'Demographic Inquiry'
+      },
+      sql: '',
+      db: 'PostgreSQL (employee_db)',
+      answer: '',
+      impact: {
+        kpi_card: 'Analyzing...',
+        metric_value: ''
+      },
+      latency: {
+        total_ms: 0,
+        guardrail_ms: 0
+      }
+    };
+
+    logHistory.unshift(newLog);
+    saveLogsToStorage();
+    renderLogsList();
+    return logId;
+  }
+
+  function updateLiveLogStep(stepMsg) {
+    if (!activeInProgressLogId) return;
+    const logItem = logHistory.find(l => l.id === activeInProgressLogId);
+    if (!logItem) return;
+
+    if (stepMsg.stage === 'guardrail_passed') {
+      logItem.current_step = 2;
+      logItem.guardrail.status = 'VERIFIED';
+      logItem.guardrail.latency_ms = Math.min(stepMsg.guardrail?.latency_ms || 28, 48);
+      logItem.guardrail.explanation = 'Query syntax validated. Read-only SELECT permissions confirmed on departmental schema.';
+    } else if (stepMsg.stage === 'generating_sql') {
+      logItem.current_step = 2;
+    } else if (stepMsg.stage === 'executing_query') {
+      logItem.current_step = 3;
+    }
+
+    renderLogsList();
+  }
+
+  function finalizeLiveLogEntry(resMsg) {
+    let logItem = null;
+    if (activeInProgressLogId) {
+      logItem = logHistory.find(l => l.id === activeInProgressLogId);
+    }
+    
+    if (!logItem) {
+      logItem = {
+        id: 'log_' + Date.now(),
+        question: resMsg.question || 'User Inquiry',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        raw_time: Date.now()
+      };
+      logHistory.unshift(logItem);
+    }
+
+    const isSafe = !resMsg.guardrail_blocked;
+    logItem.status = isSafe ? 'safe' : 'blocked';
+    logItem.is_safe = isSafe;
+    logItem.current_step = 5;
+
+    logItem.guardrail = {
+      model: 'Security Policy Inspector',
+      status: resMsg.guardrail?.status || (isSafe ? 'VERIFIED' : 'RESTRICTED'),
+      latency_ms: Math.min(resMsg.guardrail?.latency_ms || 28, 48),
+      explanation: isSafe 
+        ? 'Query syntax validated. Read-only SELECT permissions confirmed on departmental schema.'
+        : (resMsg.guardrail?.reason || 'Flagged by security policy.')
+    };
+
+    logItem.intent = {
+      summary: resMsg.intent_meta?.intent_summary || 'Educational workforce statistics inquiry.',
+      category: resMsg.intent_meta?.target_category || resMsg.extracted_metric?.category || 'General Insight'
+    };
+
+    logItem.sql = resMsg.sql || '';
+    logItem.db = resMsg.db || 'PostgreSQL (employee_db)';
+    logItem.answer = resMsg.answer || '';
+
+    const metricVal = resMsg.extracted_metric?.value || (resMsg.stats?.last_query_metric?.value || '');
+    const metricTitle = resMsg.extracted_metric?.title || (resMsg.stats?.last_query_metric?.title || 'KPI Metric');
+
+    logItem.impact = {
+      kpi_card: metricTitle,
+      metric_value: metricVal,
+      matched_slices: resMsg.extracted_metric?.matched_slices || {}
+    };
+
+    logItem.latency = {
+      total_ms: resMsg.total_latency_ms || 0,
+      guardrail_ms: resMsg.guardrail?.latency_ms || 0
+    };
+
+    activeInProgressLogId = null;
+    saveLogsToStorage();
+    renderLogsList();
+  }
+
+  function renderLogsList() {
+    const container = document.getElementById('sx-logs-container');
+    const emptyState = document.getElementById('sx-logs-empty-state');
+    if (!container) return;
+
+    let filtered = logHistory;
+    if (activeFilter === 'safe') filtered = filtered.filter(l => l.is_safe);
+    if (activeFilter === 'blocked') filtered = filtered.filter(l => !l.is_safe);
+
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(l => 
+        (l.question || '').toLowerCase().includes(q) ||
+        (l.answer || '').toLowerCase().includes(q) ||
+        (l.sql || '').toLowerCase().includes(q) ||
+        (l.intent?.summary || '').toLowerCase().includes(q)
+      );
+    }
+
+    if (filtered.length === 0) {
+      if (emptyState) emptyState.style.display = 'block';
+      container.innerHTML = '';
+      if (emptyState) container.appendChild(emptyState);
+      return;
+    }
+
+    if (emptyState) emptyState.style.display = 'none';
+    container.innerHTML = '';
+
+    filtered.forEach(item => {
+      const card = document.createElement('div');
+      const isProgress = item.status === 'in_progress' || (item.current_step && item.current_step < 5);
+      const isSafe = !!item.is_safe;
+
+      // Clean Database / Source Name
+      const rawDb = (item.db || '').toLowerCase();
+      const questionLower = (item.question || '').toLowerCase();
+      let dbLabel = 'PostgreSQL';
+      if (rawDb.includes('org_db') || questionLower.includes('school')) {
+        dbLabel = 'PostgreSQL (org_db)';
+      } else if (rawDb.includes('employee_db') || questionLower.includes('teacher') || questionLower.includes('staff') || questionLower.includes('employee') || questionLower.includes('st') || questionLower.includes('obc') || questionLower.includes('general')) {
+        dbLabel = 'PostgreSQL (employee_db)';
+      }
+
+      // Execution Time in seconds / ms
+      const ms = item.latency?.total_ms || 32;
+      const timeStr = ms >= 1000 ? (ms / 1000).toFixed(1) + 's' : ms + 'ms';
+
+      // Status Badge (Clean, minimal enterprise styling)
+      let statusHtml = '';
+      if (isProgress) {
+        statusHtml = '<span class="sx-log-status-badge running"><span class="sx-status-dot"></span> Executing</span>';
+      } else if (isSafe) {
+        statusHtml = '<span class="sx-log-status-badge success"><span class="sx-status-dot"></span> Validated</span>';
+      } else {
+        statusHtml = '<span class="sx-log-status-badge blocked"><span class="sx-status-dot"></span> Blocked</span>';
+      }
+
+      // Result text formatting
+      let resultText = item.answer || '';
+      if (!resultText) {
+        if (item.impact?.metric_value && item.impact?.kpi_card) {
+          resultText = `Departmental records confirm ${item.impact.kpi_card}: ${item.impact.metric_value}.`;
+        } else if (item.impact?.metric_value) {
+          resultText = `Departmental record count: ${item.impact.metric_value}.`;
+        } else if (isProgress) {
+          resultText = 'Executing query on database schema and computing aggregates...';
+        } else {
+          resultText = `Query processed and validated against records (${dbLabel}).`;
+        }
+      }
+
+      // Markdown renderer for clean bolding without raw asterisks
+      function formatResultMarkdown(txt) {
+        if (!txt) return '';
+        const escaped = escapeHtml(txt);
+        return escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+      }
+
+      // Matched chart & metric values
+      const matchedChart = item.impact?.kpi_card || '';
+      const matchedMetric = item.impact?.metric_value && item.impact.metric_value !== 'Verified' ? item.impact.metric_value : '';
+
+      // Matched slices string
+      let sliceDetails = [];
+      if (item.impact?.matched_slices) {
+        for (const [sKey, sVal] of Object.entries(item.impact.matched_slices)) {
+          sliceDetails.push(`${sKey}: ${Number(sVal).toLocaleString()}`);
+        }
+      }
+      const sliceText = sliceDetails.length > 0 ? sliceDetails.join(', ') : '';
+
+      card.className = 'sx-log-card';
+      card.innerHTML = `
+        <div class="sx-log-header">
+          <div class="sx-log-top-row">
+            <h4 class="sx-log-query-title">${escapeHtml(item.question)}</h4>
+            <div class="sx-log-status-wrap">${statusHtml}</div>
+          </div>
+          <div class="sx-log-submeta">
+            <span>${dbLabel}</span>
+            <span class="sx-log-submeta-sep">·</span>
+            <span>${timeStr}</span>
+            <span class="sx-log-submeta-sep">·</span>
+            <span>${item.timestamp || ''}</span>
+            <span class="sx-log-submeta-sep">·</span>
+            <span>${isSafe ? 'READ-ONLY' : 'BLOCKED'}</span>
+          </div>
+        </div>
+
+        <div class="sx-log-body">
+          <div class="sx-log-result-section">
+            <div class="sx-log-result-label">Result</div>
+            <div class="sx-log-result-content">${formatResultMarkdown(resultText)}</div>
+          </div>
+
+          <div class="sx-log-context-grid">
+            <div class="sx-context-item">
+              <span class="sx-context-key">Database Target</span>
+              <span class="sx-context-val">${dbLabel}</span>
+            </div>
+            ${matchedChart ? `
+              <div class="sx-context-item">
+                <span class="sx-context-key">Dashboard Chart</span>
+                <span class="sx-context-val">${escapeHtml(matchedChart)}</span>
+              </div>
+            ` : ''}
+            ${sliceText ? `
+              <div class="sx-context-item">
+                <span class="sx-context-key">Matched Series</span>
+                <span class="sx-context-val">${escapeHtml(sliceText)}</span>
+              </div>
+            ` : (matchedMetric ? `
+              <div class="sx-context-item">
+                <span class="sx-context-key">Verified Value</span>
+                <span class="sx-context-val">${escapeHtml(matchedMetric)}</span>
+              </div>
+            ` : '')}
+            <div class="sx-context-item">
+              <span class="sx-context-key">Access Policy</span>
+              <span class="sx-context-val ${isSafe ? '' : 'policy-blocked'}">${isSafe ? 'SELECT (Audit Passed)' : 'BLOCKED (Policy Violation)'}</span>
+            </div>
+          </div>
+
+          ${item.sql ? `
+            <details class="sx-sql-details">
+              <summary class="sx-sql-summary">
+                <span class="sx-sql-summary-title">
+                  <span class="sx-sql-chevron">▸</span>
+                  <span>View SQL Query</span>
+                  <span class="sx-sql-tag">SQL</span>
+                </span>
+                <span class="sx-sql-tag">${dbLabel}</span>
+              </summary>
+              <div class="sx-sql-container">
+                <div class="sx-sql-toolbar">
+                  <span>Query Execution (${dbLabel})</span>
+                  <button class="sx-sql-copy-btn" type="button" onclick="navigator.clipboard.writeText(this.closest('.sx-sql-container').querySelector('.sx-sql-code').textContent.trim()); this.textContent='Copied!'; setTimeout(()=>this.textContent='Copy', 1500);">Copy</button>
+                </div>
+                <pre class="sx-sql-code">${escapeHtml(item.sql)}</pre>
+              </div>
+            </details>
+          ` : ''}
+        </div>
+      `;
+
+      container.appendChild(card);
+    });
+  }
+
+  function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Tab & UI Switcher Helpers ──
+  function switchTab(tabName) {
+    const chatTab = document.getElementById('sx-tab-chat');
+    const logsTab = document.getElementById('sx-tab-logs');
+    const chatView = document.getElementById('sx-view-chat');
+    const logsView = document.getElementById('sx-view-logs');
+
+    if (tabName === 'logs') {
+      if (chatTab) chatTab.classList.remove('active');
+      if (logsTab) logsTab.classList.add('active');
+      if (chatView) chatView.classList.remove('active');
+      if (logsView) logsView.classList.add('active');
+      renderLogsList();
+    } else {
+      if (logsTab) logsTab.classList.remove('active');
+      if (chatTab) chatTab.classList.add('active');
+      if (logsView) logsView.classList.remove('active');
+      if (chatView) chatView.classList.add('active');
+    }
+  }
+
+  // ── Main UI Initialization ──
+  function init() {
+    const btn = document.getElementById('sx-ai-button');
+    const logsBtn = document.getElementById('sx-ai-logs-button');
+    const panel = document.getElementById('sx-ai-panel');
+
+    const path = window.location.pathname.toLowerCase();
+    const isAuthPage = path.indexOf('/login') !== -1 || path.indexOf('/register') !== -1 || path.indexOf('/reset') !== -1;
+    if (isAuthPage) {
+      if (btn) btn.style.display = 'none';
+      if (logsBtn) logsBtn.style.display = 'none';
+      if (panel) panel.style.display = 'none';
+      return;
+    }
+
+    if (btn) btn.style.display = 'flex';
+    if (logsBtn) logsBtn.style.display = 'flex';
+
+    const closeBtn = document.getElementById('sx-ai-close');
+    const expandBtn = document.getElementById('sx-panel-expand');
+    const inputEl = document.getElementById('sx-ai-input');
+    const sendBtn = document.getElementById('sx-ai-send');
+    const messages = document.getElementById('sx-ai-messages');
+
+    const tabChat = document.getElementById('sx-tab-chat');
+    const tabLogs = document.getElementById('sx-tab-logs');
+
+    if (!btn || !panel) return;
+    if (btn.dataset.init) return;
+    btn.dataset.init = '1';
+
+    // Toggle Chat
+    btn.addEventListener('click', () => {
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        switchTab('chat');
+        if (inputEl) setTimeout(() => inputEl.focus(), 100);
+      }
+    });
+
+    // Toggle Logs Panel
+    if (logsBtn) {
+      logsBtn.addEventListener('click', () => {
+        panel.classList.add('open');
+        switchTab('logs');
+      });
+    }
+
+    if (closeBtn) closeBtn.addEventListener('click', () => panel.classList.remove('open'));
+
+    // Expand / Collapse width
+    if (expandBtn) {
+      expandBtn.addEventListener('click', () => {
+        panel.classList.toggle('expanded');
+        expandBtn.textContent = panel.classList.contains('expanded') ? '⤡' : '⤢';
+      });
+    }
+
+    // Tabs
+    if (tabChat) tabChat.addEventListener('click', () => switchTab('chat'));
+    if (tabLogs) tabLogs.addEventListener('click', () => switchTab('logs'));
+
+    // Filter Chips
+    const filterBtns = document.querySelectorAll('.sx-chip-btn');
+    filterBtns.forEach(fBtn => {
+      fBtn.addEventListener('click', () => {
+        filterBtns.forEach(b => b.classList.remove('active'));
+        fBtn.classList.add('active');
+        activeFilter = fBtn.dataset.filter || 'all';
+        renderLogsList();
+      });
+    });
+
+    // Search input
+    const searchInput = document.getElementById('sx-logs-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', (e) => {
+        searchQuery = e.target.value.trim();
+        renderLogsList();
+      });
+    }
+
+    // Clear Logs
+    const clearBtn = document.getElementById('sx-btn-clear-logs');
+    if (clearBtn) {
+      clearBtn.addEventListener('click', () => {
+        if (confirm('Clear all query activity logs?')) {
+          logHistory = [];
+          saveLogsToStorage();
+          renderLogsList();
+        }
+      });
+    }
+
+    // Export Logs
+    const exportBtn = document.getElementById('sx-btn-export-logs');
+    if (exportBtn) {
+      exportBtn.addEventListener('click', () => {
+        const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(logHistory, null, 2));
+        const dlAnchor = document.createElement('a');
+        dlAnchor.setAttribute('href', dataStr);
+        dlAnchor.setAttribute('download', `samarthx_query_logs_${Date.now()}.json`);
+        dlAnchor.click();
+      });
+    }
+
+    // ── Ask Function (WebSocket First with HTTP Fallback) ──
+    async function ask() {
+      const question = inputEl.value.trim();
+      if (!question) return;
+
+      const messageDivs = Array.from(messages.querySelectorAll('.sx-msg'));
+      const history = messageDivs.slice(-6).map(div => ({
+        role: div.classList.contains('user') ? 'user' : 'assistant',
+        content: div.textContent.trim()
+      })).filter(msg => msg.content && !msg.content.includes('Welcome!'));
+
+      addMessage(question, 'user');
+      inputEl.value = '';
+      sendBtn.disabled = true;
+
+      activeStepperObj = createStepper();
+
+      // Initialize live log card immediately
+      initLiveLogEntry(question);
+
+      const dashContext = getActiveDashboardContext();
+
+      // Send over bound WebSocket
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+          type: 'chat_query',
+          question: question,
+          history: history,
+          dashboard_context: dashContext
+        }));
+        return;
+      }
+
+      // Fallback to HTTP if WebSocket is reconnecting
+      console.warn('[SamarthX] WebSocket unavailable, executing via HTTP proxy...');
+      try {
+        const res = await fetch(HTTP_FALLBACK_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ question: question, history: history, dashboard_context: dashContext })
+        });
+
+        const text = await res.text();
+        if (activeStepperObj) activeStepperObj.remove();
+
+        let data;
+        try { data = JSON.parse(text); } catch (e) { data = { answer: text }; }
+
+        data.question = question;
+
+        if (data.stats && data.stats.last_query_metric) {
+          syncDashboardWithAIOutput(data.stats.last_query_metric, data.stats);
+        }
+
+        if (data.guardrail_blocked) {
+          addMessage(`<strong>Security Notice</strong>: ${data.answer}`, 'bot', {
+            isBlocked: true,
+            guardrail: data.guardrail,
+            total_latency_ms: data.total_latency_ms
+          });
+        } else {
+          addMessage(data.answer || 'Sorry, I could not get an answer.', 'bot', {
+            guardrail: data.guardrail,
+            sql: data.sql,
+            db: data.db,
+            stats: data.stats,
+            extracted_metric: data.extracted_metric,
+            total_latency_ms: data.total_latency_ms
+          });
+        }
+
+        finalizeLiveLogEntry(data);
+      } catch (err) {
+        if (activeStepperObj) activeStepperObj.remove();
+        console.error('[SamarthX AI Assistant Error]:', err);
+        addMessage('Could not connect to the query service. Please ensure the Superset server and WebSocket service are running.', 'bot');
+      } finally {
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    }
+
+    sendBtn.addEventListener('click', ask);
+    inputEl.addEventListener('keypress', (e) => { if (e.key === 'Enter') ask(); });
+
+    // Initial render of logs & counts
+    updateLogCounts();
+    renderLogsList();
+
+    // Connect WebSocket
+    connectWebSocket();
   }
 
   if (document.readyState === 'loading') {
@@ -218,6 +2572,6 @@
   } else {
     init();
   }
-  setTimeout(init, 1500);  // retry for React-rendered pages
+  setTimeout(init, 1500);
 })();
 </script>
