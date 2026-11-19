@@ -191,13 +191,9 @@ def is_specific_or_adhoc_query(q: str) -> bool:
     return any(re.search(pat, q) for pat in specific_indicators)
 
 
-def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dashboard_context: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
-    """
-    100% Dynamic Collinear Chart Resolver.
-    Maps user intent to the corresponding Superset chart slice, executes the LIVE SQL query
-    against PostgreSQL, and returns dynamic values and formatted metadata.
-    """
-    q_norm = question.strip()
+def normalize_query_text(question: str) -> str:
+    """Fixes common user typos so every subagent sees the same canonical wording."""
+    q_norm = (question or "").strip()
     q_norm = re.sub(r'\bhow\s+man\b', 'how many', q_norm, flags=re.IGNORECASE)
     q_norm = re.sub(r'\b(schoolds|schoold|schoool|schoools|shcool|shcools|scool|scools)\b', 'schools', q_norm, flags=re.IGNORECASE)
     q_norm = re.sub(r'\b(managd|mannged|mngd|managment|managements)\b', 'managed', q_norm, flags=re.IGNORECASE)
@@ -207,6 +203,53 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     q_norm = re.sub(r'\b(goverment|governmnt|state\s+governmnt)\b', 'govt', q_norm, flags=re.IGNORECASE)
     q_norm = re.sub(r'\b(instutition|instutute|instituion)\b', 'institution', q_norm, flags=re.IGNORECASE)
     q_norm = re.sub(r'\b(organisations|organizations|organisation|organization)\b', 'organisations', q_norm, flags=re.IGNORECASE)
+    q_norm = re.sub(r'\b(onbaord(?:ed|ing)?|onbord(?:ed|ing)?|onborad(?:ed|ing)?|onborded|onbaorded)\b', 'onboarded', q_norm, flags=re.IGNORECASE)
+    return q_norm
+
+
+def detect_school_dimensions(q_lower: str) -> Tuple[Optional[str], Optional[str], Optional[str]]:
+    """Returns (management_key, school_type_key, education_level_key) mentioned in the query."""
+    matched_mgmt = None
+    for m_key, m_info in MANAGEMENT_TYPES.items():
+        if any(re.search(pat, q_lower) for pat in m_info["patterns"]):
+            matched_mgmt = m_key
+            break
+    matched_type = None
+    for t_key, t_info in SCHOOL_TYPES.items():
+        if t_key == "private" and ("unaided" in q_lower or "privately managed" in q_lower or matched_mgmt == "privately_managed"):
+            continue
+        if t_key == "govt" and ("central" in q_lower or matched_mgmt == "central_govt"):
+            continue
+        if any(re.search(pat, q_lower) for pat in t_info["patterns"]):
+            matched_type = t_key
+            break
+    matched_level = None
+    for l_key in ["higher_secondary", "upper_primary", "pre_primary", "secondary", "primary", "middle"]:
+        l_info = EDUCATION_LEVELS[l_key]
+        if any(re.search(pat, q_lower) for pat in l_info["patterns"]):
+            matched_level = l_key
+            break
+    return matched_mgmt, matched_type, matched_level
+
+
+ALL_DOMAINS = frozenset({"staff", "school", "catalog"})
+
+
+def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dashboard_context: Optional[Dict[str, Any]] = None,
+                          domains: Optional[Any] = None) -> Optional[Dict[str, Any]]:
+    """
+    100% Dynamic Collinear Chart Resolver.
+    Maps user intent to the corresponding Superset chart slice, executes the LIVE SQL query
+    against PostgreSQL, and returns dynamic values and formatted metadata.
+
+    `domains` restricts which route groups may answer ("staff", "school", "catalog").
+    The subagents in ai_integration/agents use it so each specialist only runs its own
+    routes; the default (None) runs every group in the original order.
+    """
+    domains = ALL_DOMAINS if domains is None else frozenset(domains)
+    staff_ok = "staff" in domains
+    school_ok = "school" in domains
+    q_norm = normalize_query_text(question)
     q_lower = q_norm.lower().strip()
 
     if is_specific_or_adhoc_query(q_lower):
@@ -242,28 +285,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
 
     # School & Management Detection
     is_school = bool(re.search(r'\b(school|schools|institution|institutions)\b', q_lower))
-    matched_mgmt = None
-    for m_key, m_info in MANAGEMENT_TYPES.items():
-        if any(re.search(pat, q_lower) for pat in m_info["patterns"]):
-            matched_mgmt = m_key
-            break
-
-    matched_type = None
-    for t_key, t_info in SCHOOL_TYPES.items():
-        if t_key == "private" and ("unaided" in q_lower or "privately managed" in q_lower or matched_mgmt == "privately_managed"):
-            continue
-        if t_key == "govt" and ("central" in q_lower or matched_mgmt == "central_govt"):
-            continue
-        if any(re.search(pat, q_lower) for pat in t_info["patterns"]):
-            matched_type = t_key
-            break
-
-    matched_level = None
-    for l_key in ["higher_secondary", "upper_primary", "pre_primary", "secondary", "primary", "middle"]:
-        l_info = EDUCATION_LEVELS[l_key]
-        if any(re.search(pat, q_lower) for pat in l_info["patterns"]):
-            matched_level = l_key
-            break
+    matched_mgmt, matched_type, matched_level = detect_school_dimensions(q_lower)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 1: TEACHER'S DESIGNATION (Slice 7)
@@ -273,7 +295,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     is_lecturer = bool(re.search(r'\b(lecturers?)\b', q_lower))
     is_vocational = bool(re.search(r'\b(vocational\s+teachers?|full\s+time\s+vocational)\b', q_lower))
 
-    if is_hoi or is_acting_head or is_lecturer or is_vocational:
+    if staff_ok and (is_hoi or is_acting_head or is_lecturer or is_vocational):
         sql = """
             SELECT UPPER(TRIM(ts.employee_designation)), COUNT(DISTINCT ts.employee_user_id)
             FROM public.teaching_staff ts
@@ -328,7 +350,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 2: EXPERIENCE BREAKDOWNS (Slices 20 & 21)
     # ═══════════════════════════════════════════════════════════════════════════
-    if has_exp and (exp_20_plus or exp_10_20 or exp_5_10 or exp_under_5):
+    if staff_ok and has_exp and (exp_20_plus or exp_10_20 or exp_5_10 or exp_under_5):
         emp_filter = "employee_type = 'NON-TEACHING STAFF'" if is_non_teaching else "employee_type IN ('TEACHING STAFF', 'ACADEMIC TEACHER', 'VOCATIONAL TEACHER')"
         title = "Non-Teaching Experience by Gender" if is_non_teaching else "Teaching Experience by Gender"
         category = "Experience Breakdown"
@@ -415,7 +437,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 3: NATURE OF APPOINTMENT (Slice 4 & 5: Regular & Non-Regular)
     # ═══════════════════════════════════════════════════════════════════════════
-    if is_reg and (is_teaching or "teacher" in q_lower or "regular" in q_lower):
+    if staff_ok and is_reg and (is_teaching or "teacher" in q_lower or "regular" in q_lower):
         sql = """
             SELECT TRIM(UPPER(e.gender)), COUNT(DISTINCT e.id)
             FROM goa.employees e
@@ -462,7 +484,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
             "slice_id": 4
         }
 
-    if is_non_reg and (is_teaching or "teacher" in q_lower or "contract" in q_lower or "temporary" in q_lower):
+    if staff_ok and is_non_reg and (is_teaching or "teacher" in q_lower or "contract" in q_lower or "temporary" in q_lower):
         sql = """
             SELECT TRIM(UPPER(e.gender)), COUNT(DISTINCT e.id)
             FROM goa.employees e
@@ -512,7 +534,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 4: SOCIAL CATEGORY DISTRIBUTION (Slice 11 / 25)
     # ═══════════════════════════════════════════════════════════════════════════
-    if is_sc or is_st or is_obc or is_general:
+    if staff_ok and (is_sc or is_st or is_obc or is_general):
         sql = """
             SELECT UPPER(TRIM(e.social_category)), COUNT(*)
             FROM goa.employees e
@@ -564,7 +586,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 5: GENDER DISTRIBUTION (Slice 6 / 24)
     # ═══════════════════════════════════════════════════════════════════════════
-    if (is_female or is_male or is_transgender) and not is_non_teaching and not has_exp:
+    if staff_ok and (is_female or is_male or is_transgender) and not is_non_teaching and not has_exp:
         sql = """
             SELECT TRIM(UPPER(e.gender)), COUNT(*)
             FROM goa.employees e
@@ -617,7 +639,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 6: TEACHING & NON-TEACHING STAFF (Slice 22)
     # ═══════════════════════════════════════════════════════════════════════════
-    if (is_non_teaching or (is_teaching and not is_reg and not is_non_reg)) and not has_exp and not is_school:
+    if staff_ok and (is_non_teaching or (is_teaching and not is_reg and not is_non_reg)) and not has_exp and not is_school:
         sql = """
             SELECT employee_type, COUNT(*)
             FROM (
@@ -663,7 +685,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 7: SCHOOLS - MANAGEMENT & TYPE WITH EDUCATION LEVEL
     # ═══════════════════════════════════════════════════════════════════════════
-    if is_school or matched_mgmt or matched_type or matched_level:
+    if school_ok and (is_school or matched_mgmt or matched_type or matched_level):
         # Cross-Dimensional Management + Level
         if matched_mgmt and matched_level:
             m_info = MANAGEMENT_TYPES[matched_mgmt]
@@ -798,7 +820,7 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # ROUTE 8: TOTAL EMPLOYEES / WORKFORCE (Slice 18 / 6)
     # ═══════════════════════════════════════════════════════════════════════════
-    if is_total_emp:
+    if staff_ok and is_total_emp:
         sql = "SELECT COUNT(DISTINCT e.id) FROM goa.employees e WHERE e.deleted_at IS NULL;"
         rows = execute_dynamic_query(sql, "employee_db")
         val = rows[0][0] if rows else 0
@@ -817,6 +839,8 @@ def align_query_to_charts(question: str, raw_numeric: Optional[int] = None, dash
     # ═══════════════════════════════════════════════════════════════════════════
     # DYNAMIC CATALOG FALLBACK (For any new or custom Superset charts)
     # ═══════════════════════════════════════════════════════════════════════════
+    if "catalog" not in domains:
+        return None
     try:
         try:
             from ai_integration.dynamic_catalog import dynamic_catalog

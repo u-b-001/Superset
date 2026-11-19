@@ -325,7 +325,7 @@ def extract_stats_from_output(question: str, answer: str, sql: str = "", dashboa
     aligned = None
     try:
         if resolve_query:
-            aligned = resolve_query(question, raw_numeric)
+            aligned = resolve_query(question, raw_numeric, dashboard_context=dashboard_context)
         elif align_query_to_charts:
             aligned = align_query_to_charts(question, raw_numeric, dashboard_context=dashboard_context)
     except Exception as e:
@@ -714,7 +714,7 @@ async def process_chat_query(websocket: Any, payload: Dict[str, Any]):
     aligned_chart = None
     try:
         if resolve_query:
-            aligned_chart = resolve_query(question)
+            aligned_chart = resolve_query(question, dashboard_context=dashboard_context)
         elif align_query_to_charts:
             aligned_chart = align_query_to_charts(question)
     except Exception as e:
@@ -725,8 +725,11 @@ async def process_chat_query(websocket: Any, payload: Dict[str, Any]):
         authentic_answer = aligned_chart.get("auth_text") or f"There are **{aligned_chart['value']}** records identified in the database."
         sql_text = aligned_chart.get("sql") or f"-- Verified query aligned with slice: {aligned_chart.get('title')}"
         cat = aligned_chart.get("category", "")
-        org_db_categories = {"School Type", "Management Type", "Management by Education Level", "School Type with Level", "School Infrastructure", "Education Level"}
-        db_name = "PostgreSQL (org_db)" if cat in org_db_categories else "PostgreSQL (employee_db)"
+        org_db_categories = {"School Type", "Management Type", "Management by Education Level", "School Type with Level", "School Infrastructure", "Education Level", "Total Schools", "Onboarding Timeline"}
+        # Subagents report the database they queried; fall back to the category map for older results.
+        db_name = aligned_chart.get("db") or ("PostgreSQL (org_db)" if cat in org_db_categories else "PostgreSQL (employee_db)")
+        if aligned_chart.get("agent"):
+            logger.info(f"Answered by '{aligned_chart['agent']}' subagent (routing scores: {aligned_chart.get('routing')})")
 
         current_stats["last_query_metric"] = aligned_chart
         current_stats["last_latency_ms"] = total_time

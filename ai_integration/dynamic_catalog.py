@@ -54,6 +54,8 @@ class SupersetDynamicCatalog:
 
         # Cached slice values: { slice_id: { "value": Any, "breakdown": Dict, "computed_at": float } }
         self._computed_cache: Dict[int, Dict[str, Any]] = {}
+        self._sql_cache: Dict[str, Tuple[Any, float]] = {}
+        self._values_cache: Dict[Any, Tuple[Dict[str, List[str]], float]] = {}
 
     def is_cache_stale(self) -> bool:
         return (time.time() - self.last_refresh_time) > self.cache_ttl
@@ -83,17 +85,35 @@ class SupersetDynamicCatalog:
                 }
 
             # 2. Fetch Datasets (tables)
-            cur.execute("SELECT id, table_name, schema, sql, database_id FROM tables ORDER BY id")
+            cur.execute("SELECT id, table_name, schema, sql, database_id, main_dttm_col FROM tables ORDER BY id")
             datasets = {}
-            for ds_id, tbl_name, tbl_schema, custom_sql, db_id in cur.fetchall():
+            for ds_id, tbl_name, tbl_schema, custom_sql, db_id, main_dttm in cur.fetchall():
                 datasets[ds_id] = {
                     "id": ds_id,
                     "table_name": tbl_name,
                     "schema": tbl_schema,
                     "custom_sql": custom_sql,
                     "database_id": db_id,
-                    "db_info": databases.get(db_id, {})
+                    "main_dttm_col": main_dttm,
+                    "db_info": databases.get(db_id, {}),
+                    "columns": {},   # column_name -> {type, is_dttm, groupby, expression, verbose_name}
+                    "metrics": {},   # saved metric name -> {expression, verbose_name}
                 }
+
+            # 2b. Dataset columns (types, temporal flags, calculated expressions)
+            cur.execute("SELECT table_id, column_name, type, is_dttm, groupby, expression, verbose_name FROM table_columns")
+            for t_id, col, ctype, is_dttm, groupby, expr, verbose in cur.fetchall():
+                if t_id in datasets and col:
+                    datasets[t_id]["columns"][col] = {
+                        "type": (ctype or "").upper(), "is_dttm": bool(is_dttm), "groupby": bool(groupby),
+                        "expression": expr or None, "verbose_name": verbose or None,
+                    }
+
+            # 2c. Saved metrics
+            cur.execute("SELECT table_id, metric_name, expression, verbose_name FROM sql_metrics")
+            for t_id, m_name, expr, verbose in cur.fetchall():
+                if t_id in datasets and m_name:
+                    datasets[t_id]["metrics"][m_name] = {"expression": expr, "verbose_name": verbose or None}
 
             # 3. Fetch Dashboards
             cur.execute("SELECT id, dashboard_title, slug FROM dashboards ORDER BY id")
@@ -274,6 +294,198 @@ class SupersetDynamicCatalog:
 
         return best_slice
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # Generic SQL builders — everything below is derived from Superset metadata,
+    # so any new chart / dataset / dashboard works without code changes.
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    GRAIN_UNITS = {
+        "PT1S": "second", "PT1M": "minute", "PT1H": "hour", "P1D": "day",
+        "P1W": "week", "P1M": "month", "P3M": "quarter", "P1Y": "year",
+    }
+
+    @staticmethod
+    def sql_literal(value: Any) -> str:
+        if value is None:
+            return "NULL"
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        return "'" + str(value).replace("'", "''") + "'"
+
+    def db_uri_for(self, dataset: Dict[str, Any]) -> str:
+        """Connection URI of the database a dataset lives in (password restored if Superset masked it)."""
+        db_uri = (dataset.get("db_info") or {}).get("uri") or ""
+        if "XXXXXXXXXX" in db_uri:
+            db_uri = db_uri.replace("XXXXXXXXXX", DEFAULT_DB_PWD)
+        if not db_uri:
+            # Legacy fallback when the metadata DB has no usable URI
+            tbl = dataset.get("table_name", "")
+            db_name = "org_db" if tbl == "schools" else "employee_db"
+            db_uri = f"postgresql://dashboard_read_only_user:{DEFAULT_DB_PWD}@172.16.0.119:5432/{db_name}"
+        return db_uri
+
+    def db_label_for(self, dataset: Dict[str, Any]) -> str:
+        """Human label such as 'PostgreSQL (org_db)' derived from the connection URI."""
+        uri = self.db_uri_for(dataset)
+        m = re.match(r"^([a-z0-9]+)(?:\+[a-z0-9]+)?://[^/]*/([^?]+)", uri)
+        if not m:
+            return (dataset.get("db_info") or {}).get("name") or "Database"
+        dialect = {"postgresql": "PostgreSQL", "postgres": "PostgreSQL", "mysql": "MySQL"}.get(m.group(1), m.group(1))
+        return f"{dialect} ({m.group(2)})"
+
+    def run_sql(self, dataset: Dict[str, Any], sql: str, ttl: float = 60.0) -> Optional[List[tuple]]:
+        """Runs a read-only query against the dataset's database. Returns None on error."""
+        key = f"{dataset.get('id')}::{sql}"
+        cached = self._sql_cache.get(key)
+        if cached and time.time() - cached[1] < ttl:
+            return cached[0]
+        try:
+            conn = psycopg2.connect(self.db_uri_for(dataset), connect_timeout=5)
+            try:
+                conn.set_session(readonly=True, autocommit=True)
+                cur = conn.cursor()
+                cur.execute("SET statement_timeout = 15000")
+                cur.execute(sql)
+                rows = cur.fetchall()
+            finally:
+                conn.close()
+            self._sql_cache[key] = (rows, time.time())
+            return rows
+        except Exception as e:
+            logger.warning(f"Query failed on dataset {dataset.get('table_name')}: {e}\nSQL: {sql}")
+            return None
+
+    @staticmethod
+    def from_clause(dataset: Dict[str, Any]) -> str:
+        custom_sql = (dataset.get("custom_sql") or "").strip().rstrip(";")
+        if custom_sql:
+            return f"({custom_sql}) AS virtual_table"
+        schema = dataset.get("schema")
+        return f"{schema}.{dataset.get('table_name')}" if schema else str(dataset.get("table_name"))
+
+    @staticmethod
+    def column_expr(dataset: Dict[str, Any], col: Any) -> Optional[str]:
+        """SQL for a column reference: plain name, calculated column, or adhoc column dict."""
+        if isinstance(col, dict):
+            return col.get("sqlExpression") or col.get("column_name") or col.get("label")
+        if not col:
+            return None
+        info = (dataset.get("columns") or {}).get(col) or {}
+        return f"({info['expression']})" if info.get("expression") else str(col)
+
+    def where_conditions(self, slice_info: Dict[str, Any]) -> List[str]:
+        """Translates a chart's adhoc_filters into SQL WHERE conditions."""
+        dataset = slice_info.get("dataset", {})
+        conds: List[str] = []
+        for flt in slice_info.get("adhoc_filters") or []:
+            if (flt.get("clause") or "WHERE").upper() != "WHERE":
+                continue
+            if flt.get("expressionType") == "SQL":
+                if flt.get("sqlExpression"):
+                    conds.append(f"({flt['sqlExpression']})")
+                continue
+            subj = self.column_expr(dataset, flt.get("subject"))
+            op = (flt.get("operator") or "IN").upper()
+            comp = flt.get("comparator")
+            if not subj:
+                continue
+            if op in ("IS NULL", "IS NOT NULL", "IS TRUE", "IS FALSE"):
+                conds.append(f"{subj} {op}")
+            elif op == "TEMPORAL_RANGE":
+                if isinstance(comp, str) and " : " in comp:
+                    lo, hi = [p.strip() for p in comp.split(" : ", 1)]
+                    if re.match(r"^\d{4}-\d{2}-\d{2}", lo):
+                        conds.append(f"{subj} >= {self.sql_literal(lo)}")
+                    if re.match(r"^\d{4}-\d{2}-\d{2}", hi):
+                        conds.append(f"{subj} < {self.sql_literal(hi)}")
+            elif comp is None or comp == "No filter":
+                continue
+            elif op in ("IN", "NOT IN"):
+                vals = comp if isinstance(comp, list) else [comp]
+                if vals:
+                    conds.append(f"{subj} {op} ({', '.join(self.sql_literal(v) for v in vals)})")
+            elif op in ("==", "="):
+                conds.append(f"{subj} = {self.sql_literal(comp)}")
+            elif op in ("!=", "<>"):
+                conds.append(f"{subj} <> {self.sql_literal(comp)}")
+            elif op in (">", "<", ">=", "<=", "LIKE", "ILIKE", "NOT LIKE"):
+                conds.append(f"{subj} {op} {self.sql_literal(comp)}")
+        return conds
+
+    def metric_sql(self, slice_info: Dict[str, Any]) -> Tuple[str, str, bool]:
+        """Returns (sql_expression, label, is_additive) for the chart's first metric."""
+        dataset = slice_info.get("dataset", {})
+        metrics = slice_info.get("metrics") or []
+        m = metrics[0] if metrics else slice_info.get("metric")
+        expr, label = "COUNT(*)", "count"
+        if isinstance(m, dict):
+            if m.get("expressionType") == "SQL" and m.get("sqlExpression"):
+                expr = m["sqlExpression"]
+            else:
+                agg = (m.get("aggregate") or "COUNT").upper()
+                col = (m.get("column") or {}).get("column_name") or "*"
+                col_sql = self.column_expr(dataset, col) if col != "*" else "*"
+                expr = f"COUNT(DISTINCT {col_sql})" if agg == "COUNT_DISTINCT" else f"{agg}({col_sql})"
+            label = m.get("label") or expr
+        elif isinstance(m, str) and m:
+            saved = (dataset.get("metrics") or {}).get(m)
+            if saved and saved.get("expression"):
+                expr, label = saved["expression"], saved.get("verbose_name") or m
+            elif m.lower() != "count":
+                expr, label = m, m
+        additive = bool(re.match(r"^\s*(COUNT|SUM)\s*\(", expr, re.IGNORECASE))
+        return expr, label, additive
+
+    def temporal_column(self, slice_info: Dict[str, Any]) -> Optional[str]:
+        """SQL of the chart's time axis, or None when the chart is not a time series."""
+        params = slice_info.get("params") or {}
+        dataset = slice_info.get("dataset", {})
+        x = params.get("x_axis") or params.get("granularity_sqla")
+        if not x:
+            return None
+        if isinstance(x, dict):
+            return self.column_expr(dataset, x) if params.get("time_grain_sqla") else None
+        cols = dataset.get("columns") or {}
+        if x in cols:
+            return self.column_expr(dataset, x) if cols[x].get("is_dttm") else None
+        # Column metadata unavailable: trust the presence of a time grain
+        return x if params.get("time_grain_sqla") or x == dataset.get("main_dttm_col") else None
+
+    def time_series_slices(self) -> List[Dict[str, Any]]:
+        """All dashboard charts that plot a metric over time."""
+        self.refresh()
+        return [s for s in self.slices.values() if self.temporal_column(s)]
+
+    def categorical_values(self, dataset: Dict[str, Any], max_distinct: int = 50) -> Dict[str, List[str]]:
+        """Distinct values of each low-cardinality text column of a dataset (cached 10 min).
+
+        Lets agents recognise filters such as 'aided' or 'english medium' in a question
+        without any hardcoded vocabulary.
+        """
+        ds_id = dataset.get("id")
+        cached = self._values_cache.get(ds_id)
+        if cached and time.time() - cached[1] < 600:
+            return cached[0]
+        text_types = ("CHAR", "TEXT", "STRING", "VARCHAR")
+        cols = [c for c, info in (dataset.get("columns") or {}).items()
+                if info.get("groupby") and not info.get("is_dttm") and any(t in info.get("type", "") for t in text_types)]
+        values: Dict[str, List[str]] = {}
+        if cols:
+            src = self.from_clause(dataset)
+            parts = [
+                f"(SELECT {self.sql_literal(c)} AS col, CAST({self.column_expr(dataset, c)} AS TEXT) AS val "
+                f"FROM {src} WHERE {self.column_expr(dataset, c)} IS NOT NULL GROUP BY 2 LIMIT {max_distinct + 1})"
+                for c in cols
+            ]
+            rows = self.run_sql(dataset, " UNION ALL ".join(parts) + ";", ttl=600) or []
+            for col, val in rows:
+                values.setdefault(col, []).append(val)
+            values = {c: v for c, v in values.items() if len(v) <= max_distinct}
+        self._values_cache[ds_id] = (values, time.time())
+        return values
+
     def execute_slice_query(self, slice_info: Dict[str, Any]) -> Tuple[Optional[int], Dict[str, int]]:
         """
         Constructs and executes the canonical SQL query for a slice against its target database,
@@ -289,62 +501,11 @@ class SupersetDynamicCatalog:
                 return entry["value"], entry["breakdown"]
 
         dataset = slice_info.get("dataset", {})
-        db_info = dataset.get("db_info", {})
-        db_uri = db_info.get("uri")
-
-        if not db_uri or "XXXXXXXXXX" in db_uri:
-            tbl = dataset.get("table_name", "")
-            if tbl == "schools":
-                db_uri = f"postgresql://dashboard_read_only_user:{DEFAULT_DB_PWD}@172.16.0.119:5432/org_db"
-            else:
-                db_uri = f"postgresql://dashboard_read_only_user:{DEFAULT_DB_PWD}@172.16.0.119:5432/employee_db"
-
-        # Build SQL query from dataset and adhoc_filters
-        table_name = dataset.get("table_name", "")
-        schema = dataset.get("schema") or "goa"
-        custom_sql = dataset.get("custom_sql")
-
-        from_clause = f"({custom_sql}) sub" if custom_sql else f"{schema}.{table_name}"
-
-        # Build WHERE conditions
-        where_conds = []
-        for flt in slice_info.get("adhoc_filters", []):
-            clause = flt.get("clause", "WHERE")
-            expr_type = flt.get("expressionType")
-            if expr_type == "SQL":
-                sql_expr = flt.get("sqlExpression")
-                if sql_expr:
-                    where_conds.append(f"({sql_expr})")
-            elif expr_type == "SIMPLE":
-                subj = flt.get("subject")
-                op = flt.get("operator", "IN")
-                comp = flt.get("comparator")
-                if not subj or comp == "No filter" or comp is None:
-                    continue
-                if op == "IN" and isinstance(comp, list):
-                    vals = ", ".join(f"'{v}'" if isinstance(v, str) else str(v).lower() for v in comp)
-                    where_conds.append(f"{subj} IN ({vals})")
-                elif op == "NOT IN" and isinstance(comp, list):
-                    vals = ", ".join(f"'{v}'" if isinstance(v, str) else str(v).lower() for v in comp)
-                    where_conds.append(f"{subj} NOT IN ({vals})")
-                elif op in ("==", "="):
-                    v_str = f"'{comp}'" if isinstance(comp, str) else str(comp)
-                    where_conds.append(f"{subj} = {v_str}")
-
+        db_uri = self.db_uri_for(dataset)
+        from_clause = self.from_clause(dataset)
+        where_conds = self.where_conditions(slice_info)
         where_str = f" WHERE {' AND '.join(where_conds)}" if where_conds else ""
-
-        # Determine metric expression
-        metric_sql = "COUNT(*)"
-        metric_obj = slice_info.get("metric")
-        if isinstance(metric_obj, dict):
-            agg = metric_obj.get("aggregate", "COUNT")
-            col = metric_obj.get("column", {}).get("column_name", "*")
-            if agg == "COUNT_DISTINCT":
-                metric_sql = f"COUNT(DISTINCT {col})"
-            elif agg:
-                metric_sql = f"{agg}({col})"
-        elif isinstance(metric_obj, str) and metric_obj != "count":
-            metric_sql = metric_obj
+        metric_sql, _label, _additive = self.metric_sql(slice_info)
 
         # Execute
         try:
